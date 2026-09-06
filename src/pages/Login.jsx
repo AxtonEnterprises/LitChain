@@ -20,7 +20,7 @@ googleProvider.setCustomParameters({
   prompt: "select_account"
 });
 
-export default function Login() {
+export default function Login({ rootMode = false }) {
   const navigate = useNavigate();
 
   const [mode, setMode] = useState("login");
@@ -60,7 +60,7 @@ export default function Login() {
         return "The Google sign-in request was cancelled. Please try again.";
 
       case "auth/unauthorized-domain":
-        return "This website is not authorized for Google sign-in in Firebase.";
+        return "LitChain.org is not authorized for Google sign-in in Firebase yet.";
 
       case "auth/operation-not-allowed":
         return "This sign-in method is not enabled in Firebase.";
@@ -113,7 +113,7 @@ export default function Login() {
         );
       }
 
-      navigate("/read");
+      navigate("/read", { replace: true });
     } catch (error) {
       setStatus(getAuthErrorMessage(error));
     } finally {
@@ -129,10 +129,8 @@ export default function Login() {
 
     try {
       await setPersistence(auth, browserLocalPersistence);
-
       await signInWithPopup(auth, googleProvider);
-
-      navigate("/read");
+      navigate("/read", { replace: true });
     } catch (error) {
       setStatus(getAuthErrorMessage(error));
     } finally {
@@ -149,18 +147,30 @@ export default function Login() {
     setStatus("");
   }
 
+  const seoPath = rootMode ? "/" : "/read/login";
+
   return (
     <main className="login-page">
       <SEO
-        title="Log In | Lit Chain"
-        description="Log in to Lit Chain to save books, reading progress, notes, journal entries, and participate in the literary community."
-        path="/read/login"
+        title={
+          mode === "login"
+            ? "Log In | Lit Chain"
+            : "Create Account | Lit Chain"
+        }
+        description="Log in or create a Lit Chain account to read, save progress, take notes, join discussions, and connect through literature."
+        path={seoPath}
         noindex
       />
 
       <section className="login-card">
-        <p className="login-eyebrow">
-          Lit Chain
+        <img
+          className="login-logo"
+          src="/branding/lit-chain-logo-horizontal.png"
+          alt="Lit Chain"
+        />
+
+        <p className="login-tagline">
+          Read. Connect. Continue the chain.
         </p>
 
         <h1>
@@ -171,17 +181,15 @@ export default function Login() {
 
         <p className="login-description">
           {mode === "login"
-            ? "Log in to continue your reading journey."
-            : "Create an account to save your books, reading progress, notes, and journal entries."}
+            ? "Log in to continue where you left off."
+            : "Create an account to save books, reading progress, notes, classes, groups, and your place in the chain."}
         </p>
 
         <form
           className="login-form"
           onSubmit={handleEmailSubmit}
         >
-          <label htmlFor="email">
-            Email
-          </label>
+          <label htmlFor="email">Email</label>
 
           <input
             id="email"
@@ -197,9 +205,7 @@ export default function Login() {
             required
           />
 
-          <label htmlFor="password">
-            Password
-          </label>
+          <label htmlFor="password">Password</label>
 
           <input
             id="password"
@@ -277,6 +283,12 @@ export default function Login() {
               ? "Create Account"
               : "Log In"}
           </button>
+        </div>
+
+        <div className="login-legal">
+          By continuing, you agree to the{" "}
+          <a href="/terms">Terms</a> and{" "}
+          <a href="/privacy">Privacy Policy</a>.
         </div>
       </section>
     </main>
