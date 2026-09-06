@@ -60,8 +60,8 @@ export default function Login({ rootMode = false }) {
         return "The Google sign-in request was cancelled. Please try again.";
 
       case "auth/unauthorized-domain":
-        return "LitChain.org is not authorized for Google sign-in in Firebase yet.";
-
+  return `Firebase error: ${error.code} — ${error.message}`;
+        
       case "auth/operation-not-allowed":
         return "This sign-in method is not enabled in Firebase.";
 
