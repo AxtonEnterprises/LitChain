@@ -1,11 +1,16 @@
-import { useEffect } from "react";
-import { Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import {
+  Routes,
+  Route,
+  Navigate,
+  useLocation,
+  useNavigate
+} from "react-router-dom";
 import { doc, getDoc } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 
 import { auth, db } from "./firebase";
 import Header from "./components/Header";
-import FoundationHome from "./pages/FoundationHome";
 import Home from "./pages/Home";
 import Search from "./pages/Search";
 import Reader from "./pages/Reader";
@@ -27,7 +32,8 @@ import JoinInvite from "./pages/JoinInvite.jsx";
 export default function App() {
   const location = useLocation();
   const navigate = useNavigate();
-  const isLitChain =
+
+  const isAppRoute =
     location.pathname === "/read" ||
     location.pathname.startsWith("/read/");
 
@@ -55,7 +61,9 @@ export default function App() {
     async function testFirebase() {
       try {
         const snap = await getDoc(doc(db, "test", "welcome"));
-        if (snap.exists()) console.log("Firebase connected:", snap.data());
+        if (snap.exists()) {
+          console.log("Firebase connected:", snap.data());
+        }
       } catch (err) {
         console.error("Firebase error:", err);
       }
@@ -66,18 +74,16 @@ export default function App() {
 
   return (
     <>
-      {isLitChain && <Header />}
+      {isAppRoute && <Header />}
 
-      <main className={isLitChain ? "app-main random-reads-app" : "foundation-app"}>
+      <main className={isAppRoute ? "app-main lit-chain-app" : "auth-app"}>
         <Routes>
-          <Route path="/" element={<FoundationHome />} />
+          {/* LitChain.org starts here. Existing users go straight to the app;
+              signed-out users see the Lit Chain login/sign-up screen. */}
+          <Route path="/" element={<RootGate />} />
 
-          {/* Lit Chain is now the app home. */}
           <Route path="/read" element={<Chain />} />
-
-          {/* The former Home page is now Discover. */}
           <Route path="/read/discover" element={<Home />} />
-
           <Route path="/read/search" element={<Search />} />
           <Route path="/read/reader/:id" element={<Reader />} />
           <Route path="/read/journal" element={<Journal />} />
@@ -89,18 +95,33 @@ export default function App() {
           <Route path="/read/login" element={<Login />} />
           <Route path="/read/join/:token" element={<JoinInvite />} />
 
-          {/* Compatibility route for old Chain links. */}
-          <Route path="/read/chain" element={<Navigate to="/read" replace />} />
+          {/* Compatibility route for older Lit Chain links. */}
+          <Route
+            path="/read/chain"
+            element={<Navigate to="/read" replace />}
+          />
 
           <Route path="/read/groups" element={<DiscoverGroups />} />
-          <Route path="/read/groups/:groupId" element={<GroupRouter />} />
+          <Route
+            path="/read/groups/:groupId"
+            element={<GroupRouter />}
+          />
 
           {/* Compatibility redirects for former standalone routes. */}
-          <Route path="/search" element={<Navigate to="/read/search" replace />} />
+          <Route
+            path="/search"
+            element={<Navigate to="/read/search" replace />}
+          />
           <Route path="/reader/:id" element={<LegacyReaderRedirect />} />
-          <Route path="/journal" element={<Navigate to="/read/journal" replace />} />
-          <Route path="/login" element={<Navigate to="/read/login" replace />} />
-          <Route path="/about" element={<Navigate to="/read/about" replace />} />
+          <Route
+            path="/journal"
+            element={<Navigate to="/read/journal" replace />}
+          />
+          <Route path="/login" element={<Navigate to="/" replace />} />
+          <Route
+            path="/about"
+            element={<Navigate to="/read/about" replace />}
+          />
           <Route path="/privacy" element={<Privacy />} />
           <Route path="/terms" element={<Terms />} />
 
@@ -111,7 +132,37 @@ export default function App() {
   );
 }
 
+function RootGate() {
+  const [user, setUser] = useState(auth.currentUser);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    return onAuthStateChanged(auth, (firebaseUser) => {
+      setUser(firebaseUser);
+      setLoading(false);
+    });
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="root-auth-loading" role="status" aria-live="polite">
+        Loading Lit Chain…
+      </div>
+    );
+  }
+
+  if (user) {
+    return <Navigate to="/read" replace />;
+  }
+
+  return <Login rootMode />;
+}
+
 function LegacyReaderRedirect() {
-  const id = window.location.pathname.split("/").filter(Boolean).pop();
+  const id = window.location.pathname
+    .split("/")
+    .filter(Boolean)
+    .pop();
+
   return <Navigate to={`/read/reader/${id}`} replace />;
 }
