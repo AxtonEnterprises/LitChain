@@ -1,8 +1,8 @@
 import { useEffect } from "react";
 
-const SITE_URL = "https://theliteraturefoundation.org";
+const SITE_URL = "https://litchain.org";
 const DEFAULT_IMAGE =
-  `${SITE_URL}/branding/tlf-logo-stacked-web.png`;
+  `${SITE_URL}/branding/lit-chain-logo-horizontal.png`;
 
 function setMeta(selector, attribute, value) {
   let element = document.head.querySelector(selector);
@@ -93,10 +93,10 @@ export default function SEO({
     );
 
     setMeta(
-  'meta[name="robots"]',
-  ["name", "robots"],
-  noindex ? "noindex, nofollow" : "index, follow"
-);
+      'meta[name="robots"]',
+      ["name", "robots"],
+      noindex ? "noindex, nofollow" : "index, follow"
+    );
 
     let canonical =
       document.head.querySelector('link[rel="canonical"]');
