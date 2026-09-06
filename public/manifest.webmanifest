@@ -1,13 +1,13 @@
 {
-  "name": "Lit Chain — The Literature Foundation",
+  "name": "Lit Chain",
   "short_name": "Lit Chain",
-  "description": "Discover, read, save, discuss, and connect through classic literature.",
-  "id": "/read",
-  "start_url": "/read",
-  "scope": "/read",
+  "description": "Read, discover, save, discuss, learn, and connect through literature.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#000000",
-  "theme_color": "#000000",
+  "background_color": "#fbf7ef",
+  "theme_color": "#0B2D45",
   "icons": [
     {
       "src": "/branding/lit-chain-icon-192.png",
