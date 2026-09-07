@@ -15,8 +15,13 @@ function cleanGutenbergText(rawText) {
     /\*\*\*\s*END OF THE PROJECT GUTENBERG EBOOK[\s\S]*/i
   ];
 
-  for (const pattern of startPatterns) text = text.replace(pattern, "");
-  for (const pattern of endPatterns) text = text.replace(pattern, "");
+  for (const pattern of startPatterns) {
+    text = text.replace(pattern, "");
+  }
+
+  for (const pattern of endPatterns) {
+    text = text.replace(pattern, "");
+  }
 
   return text
     .replace(/\n{4,}/g, "\n\n\n")
@@ -38,7 +43,10 @@ function detectChapters(paragraphs) {
   const chapters = [];
 
   paragraphs.forEach((paragraph, index) => {
-    if (paragraph.length <= 80 && chapterPattern.test(paragraph)) {
+    if (
+      paragraph.length <= 80 &&
+      chapterPattern.test(paragraph)
+    ) {
       chapters.push({
         title: paragraph,
         paragraphIndex: index
@@ -57,7 +65,9 @@ async function tryBookUrl(url) {
   });
 
   if (!response.ok) {
-    throw new Error(`Book source returned ${response.status}`);
+    throw new Error(
+      `Book source returned ${response.status}`
+    );
   }
 
   const text = await response.text();
@@ -66,7 +76,10 @@ async function tryBookUrl(url) {
     throw new Error("Book source was empty");
   }
 
-  return { sourceUrl: url, rawText: text };
+  return {
+    sourceUrl: url,
+    rawText: text
+  };
 }
 
 async function fetchBookText(id) {
@@ -76,11 +89,24 @@ async function fetchBookText(id) {
     `https://www.gutenberg.org/cache/epub/${id}/pg${id}.txt`
   ];
 
-  try {
-    return await Promise.any(possibleUrls.map(tryBookUrl));
-  } catch {
-    throw new Error(`Could not find readable text for book ID ${id}`);
+  let lastError = null;
+
+  /*
+   * Try sources sequentially instead of issuing three Gutenberg requests
+   * for every cache miss.
+   */
+  for (const url of possibleUrls) {
+    try {
+      return await tryBookUrl(url);
+    } catch (error) {
+      lastError = error;
+    }
   }
+
+  throw new Error(
+    `Could not find readable text for book ID ${id}` +
+      (lastError?.message ? ` (${lastError.message})` : "")
+  );
 }
 
 function jsonResponse(payload, status = 200, cache = false) {
@@ -93,7 +119,10 @@ function jsonResponse(payload, status = 200, cache = false) {
       "public, max-age=2592000, stale-while-revalidate=604800";
   }
 
-  return new Response(JSON.stringify(payload), { status, headers });
+  return new Response(
+    JSON.stringify(payload),
+    { status, headers }
+  );
 }
 
 function validateBookId(url) {
@@ -111,14 +140,24 @@ async function handleStructuredBook(request) {
   const id = validateBookId(url);
 
   if (!id) {
-    return jsonResponse({ error: "Missing or invalid book ID" }, 400);
+    return jsonResponse(
+      { error: "Missing or invalid book ID" },
+      400
+    );
   }
 
   try {
-    const { sourceUrl, rawText } = await fetchBookText(id);
-    const cleanedText = cleanGutenbergText(rawText);
-    const paragraphs = splitIntoParagraphs(cleanedText);
-    const chapters = detectChapters(paragraphs);
+    const { sourceUrl, rawText } =
+      await fetchBookText(id);
+
+    const cleanedText =
+      cleanGutenbergText(rawText);
+
+    const paragraphs =
+      splitIntoParagraphs(cleanedText);
+
+    const chapters =
+      detectChapters(paragraphs);
 
     return jsonResponse(
       {
@@ -149,21 +188,27 @@ async function handlePlainBookText(request) {
   const id = validateBookId(url);
 
   if (!id) {
-    return new Response("Missing or invalid book ID", {
-      status: 400,
-      headers: {
-        "Content-Type": "text/plain; charset=utf-8"
+    return new Response(
+      "Missing or invalid book ID",
+      {
+        status: 400,
+        headers: {
+          "Content-Type":
+            "text/plain; charset=utf-8"
+        }
       }
-    });
+    );
   }
 
   try {
-    const { rawText } = await fetchBookText(id);
+    const { rawText } =
+      await fetchBookText(id);
 
     return new Response(rawText, {
       status: 200,
       headers: {
-        "Content-Type": "text/plain; charset=utf-8",
+        "Content-Type":
+          "text/plain; charset=utf-8",
         "Cache-Control":
           "public, max-age=2592000, stale-while-revalidate=604800"
       }
@@ -174,23 +219,57 @@ async function handlePlainBookText(request) {
       {
         status: 404,
         headers: {
-          "Content-Type": "text/plain; charset=utf-8"
+          "Content-Type":
+            "text/plain; charset=utf-8"
         }
       }
     );
   }
 }
 
+async function serveCachedApi(request, ctx, handler) {
+  const cache = caches.default;
+  const cached = await cache.match(request);
+
+  if (cached) {
+    return cached;
+  }
+
+  const response = await handler(request);
+
+  if (response.ok) {
+    ctx.waitUntil(
+      cache.put(request, response.clone())
+    );
+  }
+
+  return response;
+}
+
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
-    if (request.method === "GET" && url.pathname === "/api/book") {
-      return handleStructuredBook(request);
+    if (
+      request.method === "GET" &&
+      url.pathname === "/api/book"
+    ) {
+      return serveCachedApi(
+        request,
+        ctx,
+        handleStructuredBook
+      );
     }
 
-    if (request.method === "GET" && url.pathname === "/api/book-text") {
-      return handlePlainBookText(request);
+    if (
+      request.method === "GET" &&
+      url.pathname === "/api/book-text"
+    ) {
+      return serveCachedApi(
+        request,
+        ctx,
+        handlePlainBookText
+      );
     }
 
     return env.ASSETS.fetch(request);

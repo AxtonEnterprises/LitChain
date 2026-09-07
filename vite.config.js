@@ -30,6 +30,15 @@ export default defineConfig({
           "**/*.{js,css,html,svg,png,ico,json,txt,xml}"
         ],
 
+        /*
+         * Large profile/group avatar libraries should be loaded on demand.
+         * Precaching every avatar makes PWA install/update unnecessarily large.
+         */
+        globIgnores: [
+          "branding/avatars/**",
+          "branding/group-avatars/**"
+        ],
+
         navigateFallbackDenylist: [
           /^\/api\//,
           /^\/robots\.txt$/,
@@ -52,6 +61,21 @@ export default defineConfig({
                 maxEntries: 60,
                 maxAgeSeconds:
                   60 * 60 * 24
+              }
+            }
+          },
+          {
+            urlPattern: ({ request, url }) =>
+              request.destination === "image" &&
+              url.origin === self.location.origin,
+
+            handler: "CacheFirst",
+
+            options: {
+              cacheName: "lit-chain-image-cache",
+              expiration: {
+                maxEntries: 120,
+                maxAgeSeconds: 60 * 60 * 24 * 30
               }
             }
           }
