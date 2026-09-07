@@ -91,10 +91,6 @@ async function fetchBookText(id) {
 
   let lastError = null;
 
-  /*
-   * Try sources sequentially instead of issuing three Gutenberg requests
-   * for every cache miss.
-   */
   for (const url of possibleUrls) {
     try {
       return await tryBookUrl(url);
@@ -246,9 +242,65 @@ async function serveCachedApi(request, ctx, handler) {
   return response;
 }
 
+function isFirebaseAuthProxyPath(pathname) {
+  return (
+    pathname.startsWith("/__/auth/") ||
+    pathname === "/__/firebase/init.json"
+  );
+}
+
+async function proxyFirebaseAuth(request) {
+  const incomingUrl = new URL(request.url);
+
+  const upstreamUrl = new URL(
+    incomingUrl.pathname + incomingUrl.search,
+    "https://random-reads-10add.firebaseapp.com"
+  );
+
+  const upstreamRequest = new Request(
+    upstreamUrl.toString(),
+    request
+  );
+
+  const upstreamResponse = await fetch(upstreamRequest);
+  const headers = new Headers(upstreamResponse.headers);
+
+  const location = headers.get("Location");
+
+  if (location) {
+    try {
+      const locationUrl = new URL(
+        location,
+        "https://random-reads-10add.firebaseapp.com"
+      );
+
+      if (
+        locationUrl.hostname ===
+        "random-reads-10add.firebaseapp.com"
+      ) {
+        locationUrl.protocol = incomingUrl.protocol;
+        locationUrl.host = incomingUrl.host;
+        headers.set("Location", locationUrl.toString());
+      }
+    } catch {
+      // Leave an unparseable Location header unchanged.
+    }
+  }
+
+  return new Response(upstreamResponse.body, {
+    status: upstreamResponse.status,
+    statusText: upstreamResponse.statusText,
+    headers
+  });
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+
+    if (isFirebaseAuthProxyPath(url.pathname)) {
+      return proxyFirebaseAuth(request);
+    }
 
     if (
       request.method === "GET" &&

@@ -30,10 +30,6 @@ export default defineConfig({
           "**/*.{js,css,html,svg,png,ico,json,txt,xml}"
         ],
 
-        /*
-         * Large profile/group avatar libraries should be loaded on demand.
-         * Precaching every avatar makes PWA install/update unnecessarily large.
-         */
         globIgnores: [
           "branding/avatars/**",
           "branding/group-avatars/**"
@@ -41,6 +37,7 @@ export default defineConfig({
 
         navigateFallbackDenylist: [
           /^\/api\//,
+          /^\/__\//,
           /^\/robots\.txt$/,
           /^\/sitemap\.xml$/
         ],
