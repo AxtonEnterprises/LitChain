@@ -6,10 +6,9 @@ import {
   useLocation,
   useNavigate
 } from "react-router-dom";
-import { doc, getDoc } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 
-import { auth, db } from "./firebase";
+import { auth } from "./firebase";
 import Header from "./components/Header";
 import Home from "./pages/Home";
 import Search from "./pages/Search";
@@ -57,29 +56,12 @@ export default function App() {
     });
   }, [location.pathname, navigate]);
 
-  useEffect(() => {
-    async function testFirebase() {
-      try {
-        const snap = await getDoc(doc(db, "test", "welcome"));
-        if (snap.exists()) {
-          console.log("Firebase connected:", snap.data());
-        }
-      } catch (err) {
-        console.error("Firebase error:", err);
-      }
-    }
-
-    testFirebase();
-  }, []);
-
   return (
     <>
       {isAppRoute && <Header />}
 
       <main className={isAppRoute ? "app-main lit-chain-app" : "auth-app"}>
         <Routes>
-          {/* LitChain.org starts here. Existing users go straight to the app;
-              signed-out users see the Lit Chain login/sign-up screen. */}
           <Route path="/" element={<RootGate />} />
 
           <Route path="/read" element={<Chain />} />
@@ -95,7 +77,6 @@ export default function App() {
           <Route path="/read/login" element={<Login />} />
           <Route path="/read/join/:token" element={<JoinInvite />} />
 
-          {/* Compatibility route for older Lit Chain links. */}
           <Route
             path="/read/chain"
             element={<Navigate to="/read" replace />}
@@ -107,7 +88,6 @@ export default function App() {
             element={<GroupRouter />}
           />
 
-          {/* Compatibility redirects for former standalone routes. */}
           <Route
             path="/search"
             element={<Navigate to="/read/search" replace />}
