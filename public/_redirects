@@ -1,19 +1,19 @@
-# Legacy Literature Foundation URLs
+# Legacy Literature Foundation URLs now belong on the Foundation site.
 
-/about-us /#about-foundation 301
-/about-us/ /#about-foundation 301
+/about-us https://theliteraturefoundation.org/#about-foundation 301
+/about-us/ https://theliteraturefoundation.org/#about-foundation 301
 
 /random-reads /read 301
 /random-reads/ /read 301
 
-/proof-of-reading /#programs 301
-/proof-of-reading/ /#programs 301
+/proof-of-reading https://theliteraturefoundation.org/#programs 301
+/proof-of-reading/ https://theliteraturefoundation.org/#programs 301
 
-/events / 301
-/events/ / 301
+/events https://theliteraturefoundation.org/ 301
+/events/ https://theliteraturefoundation.org/ 301
 
-/contact-us /#about-foundation 301
-/contact-us/ /#about-foundation 301
+/contact-us https://theliteraturefoundation.org/#about-foundation 301
+/contact-us/ https://theliteraturefoundation.org/#about-foundation 301
 
-/legal-notice / 301
-/legal-notice/ / 301
+/legal-notice /terms 301
+/legal-notice/ /terms 301
