@@ -8,14 +8,11 @@ import { auth, db } from "../lib/firebase";
 
 export async function getNativeProfile() {
   const user = auth.currentUser;
+
   if (!user) return null;
 
   const snapshot = await getDoc(
-    doc(
-      db,
-      "users",
-      user.uid
-    )
+    doc(db, "users", user.uid)
   );
 
   return snapshot.exists()
@@ -28,7 +25,8 @@ export async function getNativeProfile() {
         displayName:
           user.displayName || "",
         photoURL:
-          user.photoURL || ""
+          user.photoURL || "",
+        avatar: ""
       };
 }
 
@@ -46,19 +44,24 @@ export async function saveNativeProfile(
   const clean = {
     displayName:
       String(
-        updates.displayName ||
-        ""
+        updates.displayName || ""
       ).trim(),
+
     about:
       String(
-        updates.about ||
-        ""
+        updates.about || ""
       ).trim(),
+
+    // Keep the PWA's canonical avatar ID.
+    avatar:
+      String(
+        updates.avatar || ""
+      ).trim(),
+
+    // Also keep a resolved URL for native rendering.
     photoURL:
       String(
-        updates.photoURL ||
-        updates.avatar ||
-        ""
+        updates.photoURL || ""
       ).trim()
   };
 
