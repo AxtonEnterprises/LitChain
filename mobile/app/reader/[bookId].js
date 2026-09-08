@@ -1,10 +1,12 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState
 } from "react";
 import {
   ActivityIndicator,
+  Dimensions,
   FlatList,
   Pressable,
   SafeAreaView,
@@ -19,13 +21,18 @@ import {
 
 import { BRAND } from "../../../shared/brand";
 
+const PAGE_CHAR_TARGET = 1500;
+
 async function readResponse(response) {
   const type =
-    response.headers.get(
-      "content-type"
-    ) || "";
+    response.headers.get("content-type") ||
+    "";
 
-  if (type.includes("application/json")) {
+  if (
+    type.includes(
+      "application/json"
+    )
+  ) {
     return response.json();
   }
 
@@ -46,6 +53,42 @@ function extractText(value) {
     value.body ||
     ""
   );
+}
+
+function paginate(paragraphs) {
+  const pages = [];
+  let current = [];
+  let size = 0;
+
+  paragraphs.forEach(
+    (paragraph, index) => {
+      const nextSize =
+        size + paragraph.length;
+
+      if (
+        current.length &&
+        nextSize >
+          PAGE_CHAR_TARGET
+      ) {
+        pages.push(current);
+        current = [];
+        size = 0;
+      }
+
+      current.push({
+        text: paragraph,
+        index
+      });
+
+      size += paragraph.length;
+    }
+  );
+
+  if (current.length) {
+    pages.push(current);
+  }
+
+  return pages;
 }
 
 export default function NativeReader() {
@@ -70,13 +113,23 @@ export default function NativeReader() {
   const [error, setError] =
     useState("");
 
+  const [pageIndex, setPageIndex] =
+    useState(0);
+
+  const [fontSize, setFontSize] =
+    useState(18);
+
+  const [dark, setDark] =
+    useState(false);
+
+  const pagerRef =
+    useRef(null);
+
   useEffect(() => {
     let active = true;
 
     (async () => {
       try {
-        setLoading(true);
-
         const urls = [
           `https://litchain.org/api/book-text?id=${encodeURIComponent(
             bookId
@@ -96,20 +149,19 @@ export default function NativeReader() {
             continue;
           }
 
-          const value =
-            await readResponse(
-              response
-            );
-
           loaded =
-            extractText(value);
+            extractText(
+              await readResponse(
+                response
+              )
+            );
 
           if (loaded) break;
         }
 
         if (!loaded) {
           throw new Error(
-            "No readable text was returned."
+            "No readable text."
           );
         }
 
@@ -121,7 +173,7 @@ export default function NativeReader() {
 
         if (active) {
           setError(
-            "This book could not be loaded in the native reader."
+            "This book could not be loaded."
           );
         }
       } finally {
@@ -148,9 +200,93 @@ export default function NativeReader() {
       [text]
     );
 
+  const pages =
+    useMemo(
+      () => paginate(paragraphs),
+      [paragraphs]
+    );
+
+  function goToPage(next) {
+    const safe = Math.max(
+      0,
+      Math.min(
+        Number(next) || 0,
+        Math.max(
+          pages.length - 1,
+          0
+        )
+      )
+    );
+
+    setPageIndex(safe);
+
+    pagerRef.current
+      ?.scrollToIndex({
+        index: safe,
+        animated: true
+      });
+  }
+
+  const palette = dark
+    ? {
+        background: "#111516",
+        surface: "#171D1E",
+        text: "#EEF3F3",
+        muted: "#9BA9AA",
+        line: "#263234"
+      }
+    : {
+        background: "#FFFDF8",
+        surface: "#FFFFFF",
+        text: "#242A2B",
+        muted: "#79888A",
+        line: BRAND.line
+      };
+
+  const width =
+    Dimensions.get("window").width;
+
+  if (loading) {
+    return (
+      <SafeAreaView
+        style={[
+          styles.safe,
+          {
+            backgroundColor:
+              palette.background
+          }
+        ]}
+      >
+        <View style={styles.center}>
+          <ActivityIndicator
+            size="large"
+          />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
-    <SafeAreaView style={styles.safe}>
-      <View style={styles.header}>
+    <SafeAreaView
+      style={[
+        styles.safe,
+        {
+          backgroundColor:
+            palette.background
+        }
+      ]}
+    >
+      <View
+        style={[
+          styles.header,
+          {
+            backgroundColor:
+              palette.surface,
+            borderBottomColor:
+              palette.line
+          }
+        ]}
+      >
         <Pressable
           onPress={() =>
             router.back()
@@ -161,60 +297,231 @@ export default function NativeReader() {
           </Text>
         </Pressable>
 
-        <Text
-          numberOfLines={2}
-          style={styles.title}
-        >
-          {title}
-        </Text>
-
-        {!!author && (
-          <Text style={styles.author}>
-            {author}
+        <View style={styles.titleWrap}>
+          <Text
+            numberOfLines={1}
+            style={[
+              styles.title,
+              {
+                color:
+                  palette.text
+              }
+            ]}
+          >
+            {title}
           </Text>
-        )}
+
+          {!!author && (
+            <Text
+              numberOfLines={1}
+              style={[
+                styles.author,
+                {
+                  color:
+                    palette.muted
+                }
+              ]}
+            >
+              {author}
+            </Text>
+          )}
+        </View>
       </View>
 
-      {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator
-            size="large"
-          />
-        </View>
-      ) : error ? (
+      {!!error ? (
         <View style={styles.center}>
           <Text style={styles.error}>
             {error}
           </Text>
         </View>
       ) : (
-        <FlatList
-          data={paragraphs}
-          keyExtractor={(_, index) =>
-            String(index)
-          }
-          contentContainerStyle={
-            styles.content
-          }
-          renderItem={({
-            item,
-            index
-          }) => (
-            <View style={styles.row}>
-              <Text
-                style={
-                  styles.paragraphNumber
-                }
-              >
-                {index + 1}
-              </Text>
+        <>
+          <FlatList
+            ref={pagerRef}
+            horizontal
+            pagingEnabled
+            data={pages}
+            keyExtractor={(_, index) =>
+              String(index)
+            }
+            showsHorizontalScrollIndicator={
+              false
+            }
+            getItemLayout={(_, index) => ({
+              length: width,
+              offset: width * index,
+              index
+            })}
+            onMomentumScrollEnd={(
+              event
+            ) => {
+              const next =
+                Math.round(
+                  event.nativeEvent
+                    .contentOffset.x /
+                    Math.max(width, 1)
+                );
 
-              <Text style={styles.text}>
-                {item}
+              setPageIndex(next);
+            }}
+            renderItem={({ item }) => (
+              <View
+                style={[
+                  styles.page,
+                  { width }
+                ]}
+              >
+                {item.map(
+                  (paragraph) => (
+                    <View
+                      key={
+                        paragraph.index
+                      }
+                      style={
+                        styles.paragraphRow
+                      }
+                    >
+                      <Text
+                        style={[
+                          styles.number,
+                          {
+                            color:
+                              palette.muted
+                          }
+                        ]}
+                      >
+                        {paragraph.index +
+                          1}
+                      </Text>
+
+                      <Text
+                        style={{
+                          flex: 1,
+                          color:
+                            palette.text,
+                          fontSize,
+                          lineHeight:
+                            fontSize * 1.55
+                        }}
+                      >
+                        {paragraph.text}
+                      </Text>
+                    </View>
+                  )
+                )}
+              </View>
+            )}
+          />
+
+          <View
+            style={[
+              styles.controls,
+              {
+                backgroundColor:
+                  palette.surface,
+                borderTopColor:
+                  palette.line
+              }
+            ]}
+          >
+            <Pressable
+              onPress={() =>
+                goToPage(
+                  pageIndex - 1
+                )
+              }
+              style={styles.control}
+            >
+              <Text
+                style={styles.controlText}
+              >
+                ‹
               </Text>
-            </View>
-          )}
-        />
+            </Pressable>
+
+            <Pressable
+              onPress={() =>
+                setFontSize((size) =>
+                  Math.max(
+                    14,
+                    size - 1
+                  )
+                )
+              }
+              style={styles.control}
+            >
+              <Text
+                style={styles.controlText}
+              >
+                A−
+              </Text>
+            </Pressable>
+
+            <Text
+              style={[
+                styles.pageCount,
+                {
+                  color:
+                    palette.muted
+                }
+              ]}
+            >
+              {pageIndex + 1} /{" "}
+              {Math.max(
+                pages.length,
+                1
+              )}
+            </Text>
+
+            <Pressable
+              onPress={() =>
+                setFontSize((size) =>
+                  Math.min(
+                    28,
+                    size + 1
+                  )
+                )
+              }
+              style={styles.control}
+            >
+              <Text
+                style={styles.controlText}
+              >
+                A+
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() =>
+                setDark(
+                  (value) => !value
+                )
+              }
+              style={styles.control}
+            >
+              <Text
+                style={styles.controlText}
+              >
+                {dark ? "☀" : "☾"}
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() =>
+                goToPage(
+                  pageIndex + 1
+                )
+              }
+              style={styles.control}
+            >
+              <Text
+                style={styles.controlText}
+              >
+                ›
+              </Text>
+            </Pressable>
+          </View>
+        </>
       )}
     </SafeAreaView>
   );
@@ -222,60 +529,79 @@ export default function NativeReader() {
 
 const styles = StyleSheet.create({
   safe: {
-    flex: 1,
-    backgroundColor: "#FFFDF8"
-  },
-  header: {
-    backgroundColor:
-      BRAND.surface,
-    borderBottomWidth: 1,
-    borderBottomColor:
-      BRAND.line,
-    padding: 16
-  },
-  back: {
-    color: BRAND.tealDark,
-    fontWeight: "900"
-  },
-  title: {
-    color: BRAND.ink,
-    fontSize: 22,
-    fontWeight: "900",
-    marginTop: 9
-  },
-  author: {
-    color: BRAND.muted,
-    marginTop: 3
+    flex: 1
   },
   center: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    padding: 26
+    padding: 28
+  },
+  header: {
+    minHeight: 76,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    alignItems: "center"
+  },
+  back: {
+    color: BRAND.tealDark,
+    fontWeight: "900"
+  },
+  titleWrap: {
+    flex: 1,
+    marginLeft: 14
+  },
+  title: {
+    fontWeight: "900",
+    fontSize: 17
+  },
+  author: {
+    marginTop: 2,
+    fontSize: 11
   },
   error: {
     color: BRAND.danger,
     textAlign: "center"
   },
-  content: {
-    paddingHorizontal: 20,
+  page: {
+    flex: 1,
+    paddingHorizontal: 22,
     paddingVertical: 24
   },
-  row: {
+  paragraphRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    marginBottom: 20
+    marginBottom: 18
   },
-  paragraphNumber: {
-    width: 36,
-    color: "#A3AEAE",
-    fontSize: 11,
+  number: {
+    width: 34,
+    fontSize: 10,
     paddingTop: 4
   },
-  text: {
-    flex: 1,
-    color: "#242A2B",
+  controls: {
+    minHeight: 64,
+    borderTopWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-around",
+    paddingHorizontal: 8
+  },
+  control: {
+    minWidth: 42,
+    minHeight: 42,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  controlText: {
+    color: BRAND.tealDark,
     fontSize: 18,
-    lineHeight: 30
+    fontWeight: "900"
+  },
+  pageCount: {
+    minWidth: 58,
+    textAlign: "center",
+    fontSize: 12,
+    fontWeight: "700"
   }
 });
