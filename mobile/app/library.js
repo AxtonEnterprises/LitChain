@@ -27,6 +27,14 @@ import {
   LIBRARY_TABS
 } from "../../shared/libraryTabs";
 
+import {
+  profileAvatarUrl
+} from "../../shared/profileAvatars";
+
+import {
+  groupAvatarUrl
+} from "../../shared/groupAvatars";
+
 import { BRAND } from "../../shared/brand";
 
 export default function LibraryScreen() {
@@ -39,16 +47,20 @@ export default function LibraryScreen() {
   const [loading, setLoading] =
     useState(true);
 
+  async function load() {
+    try {
+      setLoading(true);
+
+      setBundle(
+        await getNativeLibraryBundle()
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
   useEffect(() => {
-    (async () => {
-      try {
-        setBundle(
-          await getNativeLibraryBundle()
-        );
-      } finally {
-        setLoading(false);
-      }
-    })();
+    load();
   }, []);
 
   const items = useMemo(() => {
@@ -62,51 +74,91 @@ export default function LibraryScreen() {
       return bundle.journal;
     }
 
-    if (tab === "saved") {
-      return [
-        ...bundle.savedBooks.map(
-          (item) => ({
-            ...item,
-            savedType: "book"
-          })
-        ),
-        ...bundle.savedChain.map(
-          (item) => ({
-            ...item,
-            savedType: "chain"
-          })
-        )
-      ];
-    }
-
     if (tab === "friends") {
       return bundle.friends;
     }
 
-    return bundle.groups;
+    if (tab === "groups") {
+      return bundle.groups;
+    }
+
+    return [
+      ...bundle.savedBooks.map(
+        (item) => ({
+          ...item,
+          savedType: "book"
+        })
+      ),
+      ...bundle.savedChain.map(
+        (item) => ({
+          ...item,
+          savedType: "chain"
+        })
+      )
+    ];
   }, [bundle, tab]);
 
-  function openBook(item) {
-    const bookId =
-      item.bookId ||
-      item.id;
+  function openItem(item) {
+    if (tab === "groups") {
+      router.push({
+        pathname:
+          "/group/[groupId]",
+        params: {
+          groupId: item.id,
+          name:
+            item.name || "Group",
+          role:
+            item.membership?.role ||
+            ""
+        }
+      });
 
-    if (!bookId) return;
+      return;
+    }
 
-    router.push({
-      pathname:
-        "/reader/[bookId]",
-      params: {
-        bookId:
-          String(bookId),
-        title:
-          item.title ||
-          "Book",
-        author:
-          item.author ||
-          ""
-      }
-    });
+    const bookLike =
+      tab === "timeline" ||
+      (
+        tab === "saved" &&
+        item.savedType === "book"
+      );
+
+    if (bookLike) {
+      router.push({
+        pathname:
+          "/reader/[bookId]",
+        params: {
+          bookId:
+            String(
+              item.bookId ||
+              item.id
+            ),
+          title:
+            item.title || "Book",
+          author:
+            item.author || ""
+        }
+      });
+    }
+  }
+
+  const profileImage =
+    profileAvatarUrl(
+      bundle?.profile?.avatar
+    ) ||
+    bundle?.profile?.photoURL ||
+    "";
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.center}>
+          <ActivityIndicator
+            size="large"
+          />
+        </View>
+      </SafeAreaView>
+    );
   }
 
   return (
@@ -159,196 +211,224 @@ export default function LibraryScreen() {
         )}
       </ScrollView>
 
-      {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator
-            size="large"
-          />
-        </View>
-      ) : (
-        <FlatList
-          data={items}
-          key={tab}
-          keyExtractor={(
-            item,
-            index
-          ) =>
-            `${tab}_${
-              item.id || index
-            }`
-          }
-          contentContainerStyle={
-            styles.list
-          }
-          ListHeaderComponent={
-            tab === "timeline" &&
-            bundle?.profile ? (
-              <Pressable
-                onPress={() =>
-                  router.push(
-                    "/profile/edit"
-                  )
-                }
-                style={
-                  styles.profileCard
-                }
-              >
-                {Boolean(
-                  bundle.profile
-                    .photoURL ||
-                  bundle.profile.avatar
-                ) ? (
-                  <Image
-                    source={{
-                      uri:
-                        bundle.profile
-                          .photoURL ||
-                        bundle.profile
-                          .avatar
-                    }}
-                    style={
-                      styles.avatar
-                    }
-                  />
-                ) : (
-                  <View
-                    style={
-                      styles.avatarFallback
-                    }
-                  >
-                    <Text
-                      style={
-                        styles.avatarInitial
-                      }
-                    >
-                      {String(
-                        bundle.profile
-                          .displayName ||
-                          bundle.profile
-                            .username ||
-                          "L"
-                      )
-                        .charAt(0)
-                        .toUpperCase()}
-                    </Text>
-                  </View>
-                )}
-
+      <FlatList
+        data={items}
+        key={tab}
+        keyExtractor={(
+          item,
+          index
+        ) =>
+          `${tab}_${
+            item.id || index
+          }`
+        }
+        contentContainerStyle={
+          styles.list
+        }
+        ListHeaderComponent={
+          tab === "timeline" &&
+          bundle?.profile ? (
+            <Pressable
+              onPress={() =>
+                router.push(
+                  "/profile/edit"
+                )
+              }
+              style={
+                styles.profileCard
+              }
+            >
+              {profileImage ? (
+                <Image
+                  source={{
+                    uri: profileImage
+                  }}
+                  style={styles.avatar}
+                />
+              ) : (
                 <View
                   style={
-                    styles.profileCopy
+                    styles.avatarFallback
                   }
                 >
                   <Text
                     style={
-                      styles.profileName
+                      styles.avatarInitial
                     }
                   >
-                    {bundle.profile
-                      .displayName ||
+                    {String(
                       bundle.profile
-                        .username ||
-                      "Lit Chain Reader"}
-                  </Text>
-
-                  {!!bundle.profile
-                    .about && (
-                    <Text
-                      numberOfLines={2}
-                      style={
-                        styles.profileAbout
-                      }
-                    >
-                      {
+                        .displayName ||
                         bundle.profile
-                          .about
-                      }
-                    </Text>
-                  )}
-
-                  <Text
-                    style={
-                      styles.editHint
-                    }
-                  >
-                    Tap to edit profile
+                          .username ||
+                        "L"
+                    )
+                      .charAt(0)
+                      .toUpperCase()}
                   </Text>
                 </View>
-              </Pressable>
-            ) : null
-          }
-          ListEmptyComponent={
-            <View style={styles.center}>
-              <Text style={styles.empty}>
-                Nothing here yet.
-              </Text>
-            </View>
-          }
-          renderItem={({ item }) => {
-            const bookLike =
-              tab === "timeline" ||
-              (
-                tab === "saved" &&
-                item.savedType === "book"
-              );
+              )}
 
-            return (
-              <Pressable
-                disabled={!bookLike}
-                onPress={() =>
-                  openBook(item)
+              <View
+                style={
+                  styles.profileCopy
                 }
-                style={styles.card}
               >
                 <Text
-                  style={styles.eyebrow}
+                  style={
+                    styles.profileName
+                  }
                 >
-                  {tab.toUpperCase()}
+                  {bundle.profile
+                    .displayName ||
+                    bundle.profile
+                      .username ||
+                    "Lit Chain Reader"}
                 </Text>
 
-                <Text style={styles.title}>
-                  {item.title ||
-                    item.name ||
-                    item.displayName ||
-                    item.username ||
-                    "Lit Chain item"}
-                </Text>
-
-                {!!item.author && (
+                {!!bundle.profile
+                  .about && (
                   <Text
+                    numberOfLines={2}
                     style={
-                      styles.secondary
+                      styles.profileAbout
                     }
                   >
-                    {item.author}
+                    {
+                      bundle.profile
+                        .about
+                    }
                   </Text>
                 )}
 
-                {tab === "timeline" && (
-                  <Text
-                    style={styles.detail}
-                  >
-                    {Math.round(
-                      Number(
-                        item.percentComplete
-                      ) || 0
+                <Text
+                  style={styles.editHint}
+                >
+                  Tap to edit profile
+                </Text>
+              </View>
+            </Pressable>
+          ) : null
+        }
+        ListEmptyComponent={
+          <View style={styles.center}>
+            <Text style={styles.empty}>
+              Nothing here yet.
+            </Text>
+          </View>
+        }
+        renderItem={({ item }) => {
+          const friendImage =
+            tab === "friends"
+              ? (
+                  profileAvatarUrl(
+                    item.avatar
+                  ) ||
+                  item.photoURL ||
+                  ""
+                )
+              : "";
+
+          const groupImage =
+            tab === "groups"
+              ? groupAvatarUrl(
+                  item.avatar
+                )
+              : "";
+
+          return (
+            <Pressable
+              onPress={() =>
+                openItem(item)
+              }
+              style={styles.card}
+            >
+              {!!friendImage && (
+                <Image
+                  source={{
+                    uri: friendImage
+                  }}
+                  style={
+                    styles.smallAvatar
+                  }
+                />
+              )}
+
+              {!!groupImage && (
+                <Image
+                  source={{
+                    uri: groupImage
+                  }}
+                  style={
+                    styles.groupAvatar
+                  }
+                />
+              )}
+
+              <Text
+                style={styles.eyebrow}
+              >
+                {tab.toUpperCase()}
+              </Text>
+
+              <Text style={styles.title}>
+                {item.title ||
+                  item.name ||
+                  item.displayName ||
+                  item.username ||
+                  "Lit Chain item"}
+              </Text>
+
+              {!!item.author && (
+                <Text
+                  style={
+                    styles.secondary
+                  }
+                >
+                  {item.author}
+                </Text>
+              )}
+
+              {tab === "timeline" && (
+                <Text
+                  style={styles.detail}
+                >
+                  {Math.round(
+                    Number(
+                      item.percentComplete
+                    ) || 0
+                  )}
+                  % complete · Tap to read
+                </Text>
+              )}
+
+              {tab === "friends" && (
+                <Text
+                  style={styles.detail}
+                >
+                  Friend
+                </Text>
+              )}
+
+              {tab === "groups" && (
+                <Text
+                  style={styles.detail}
+                >
+                  {item.membership
+                    ?.role ||
+                    (
+                      item.type ===
+                      "class"
+                        ? "Class"
+                        : "Reading Group"
                     )}
-                    % complete · Tap to read
-                  </Text>
-                )}
-
-                {tab === "friends" && (
-                  <Text
-                    style={styles.detail}
-                  >
-                    Friend
-                  </Text>
-                )}
-              </Pressable>
-            );
-          }}
-        />
-      )}
+                  {" · Tap to open"}
+                </Text>
+              )}
+            </Pressable>
+          );
+        }}
+      />
 
       <BottomNav active="library" />
     </SafeAreaView>
@@ -358,11 +438,20 @@ export default function LibraryScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: BRAND.background
+    backgroundColor:
+      BRAND.background
+  },
+  center: {
+    flex: 1,
+    minHeight: 220,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24
   },
   tabScroll: {
     maxHeight: 58,
-    backgroundColor: BRAND.surface
+    backgroundColor:
+      BRAND.surface
   },
   tabs: {
     paddingHorizontal: 12,
@@ -376,12 +465,11 @@ const styles = StyleSheet.create({
     borderColor: BRAND.line,
     borderRadius: 999,
     alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 14
+    justifyContent: "center"
   },
   tabActive: {
-    backgroundColor: BRAND.teal,
-    borderColor: BRAND.teal
+    backgroundColor:
+      BRAND.teal
   },
   tabText: {
     color: BRAND.muted,
@@ -390,23 +478,14 @@ const styles = StyleSheet.create({
   tabTextActive: {
     color: "#FFFFFF"
   },
-  center: {
-    flex: 1,
-    minHeight: 220,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 24
-  },
-  empty: {
-    color: BRAND.muted
-  },
   list: {
     padding: 16
   },
   profileCard: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: BRAND.surface,
+    backgroundColor:
+      BRAND.surface,
     borderRadius: 20,
     borderWidth: 1,
     borderColor: BRAND.line,
@@ -422,7 +501,8 @@ const styles = StyleSheet.create({
     width: 68,
     height: 68,
     borderRadius: 34,
-    backgroundColor: BRAND.teal,
+    backgroundColor:
+      BRAND.teal,
     alignItems: "center",
     justifyContent: "center"
   },
@@ -451,18 +531,30 @@ const styles = StyleSheet.create({
     fontSize: 11
   },
   card: {
-    backgroundColor: BRAND.surface,
+    backgroundColor:
+      BRAND.surface,
     borderWidth: 1,
     borderColor: BRAND.line,
     borderRadius: 18,
     padding: 18,
     marginBottom: 12
   },
+  smallAvatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    marginBottom: 10
+  },
+  groupAvatar: {
+    width: 60,
+    height: 60,
+    borderRadius: 14,
+    marginBottom: 10
+  },
   eyebrow: {
     color: BRAND.tealDark,
     fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 1
+    fontWeight: "900"
   },
   title: {
     color: BRAND.ink,
@@ -478,5 +570,8 @@ const styles = StyleSheet.create({
     color: BRAND.tealDark,
     marginTop: 12,
     fontWeight: "800"
+  },
+  empty: {
+    color: BRAND.muted
   }
 });
