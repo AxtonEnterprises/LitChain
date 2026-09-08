@@ -6,6 +6,7 @@ import {
 import {
   ActivityIndicator,
   FlatList,
+  Image,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -13,6 +14,7 @@ import {
   Text,
   View
 } from "react-native";
+import { router } from "expo-router";
 
 import AppHeader from "../components/AppHeader";
 import BottomNav from "../components/BottomNav";
@@ -37,19 +39,11 @@ export default function LibraryScreen() {
   const [loading, setLoading] =
     useState(true);
 
-  const [error, setError] =
-    useState("");
-
   useEffect(() => {
     (async () => {
       try {
         setBundle(
           await getNativeLibraryBundle()
-        );
-      } catch (error) {
-        console.error(error);
-        setError(
-          "Your Library could not be loaded."
         );
       } finally {
         setLoading(false);
@@ -92,6 +86,29 @@ export default function LibraryScreen() {
     return bundle.groups;
   }, [bundle, tab]);
 
+  function openBook(item) {
+    const bookId =
+      item.bookId ||
+      item.id;
+
+    if (!bookId) return;
+
+    router.push({
+      pathname:
+        "/reader/[bookId]",
+      params: {
+        bookId:
+          String(bookId),
+        title:
+          item.title ||
+          "Book",
+        author:
+          item.author ||
+          ""
+      }
+    });
+  }
+
   return (
     <SafeAreaView style={styles.safe}>
       <AppHeader
@@ -99,7 +116,8 @@ export default function LibraryScreen() {
         subtitle={
           bundle?.profile
             ?.displayName ||
-          bundle?.profile?.username ||
+          bundle?.profile
+            ?.username ||
           "Your Lit Chain"
         }
       />
@@ -147,12 +165,6 @@ export default function LibraryScreen() {
             size="large"
           />
         </View>
-      ) : error ? (
-        <View style={styles.center}>
-          <Text style={styles.error}>
-            {error}
-          </Text>
-        </View>
       ) : (
         <FlatList
           data={items}
@@ -171,122 +183,170 @@ export default function LibraryScreen() {
           ListHeaderComponent={
             tab === "timeline" &&
             bundle?.profile ? (
-              <View
-                style={styles.profileCard}
+              <Pressable
+                onPress={() =>
+                  router.push(
+                    "/profile/edit"
+                  )
+                }
+                style={
+                  styles.profileCard
+                }
               >
-                <Text
-                  style={
-                    styles.profileName
-                  }
-                >
-                  {bundle.profile
-                    .displayName ||
-                    bundle.profile
-                      .username ||
-                    "Lit Chain Reader"}
-                </Text>
-
-                {!!bundle.profile
-                  .about && (
-                  <Text
+                {Boolean(
+                  bundle.profile
+                    .photoURL ||
+                  bundle.profile.avatar
+                ) ? (
+                  <Image
+                    source={{
+                      uri:
+                        bundle.profile
+                          .photoURL ||
+                        bundle.profile
+                          .avatar
+                    }}
                     style={
-                      styles.profileAbout
+                      styles.avatar
+                    }
+                  />
+                ) : (
+                  <View
+                    style={
+                      styles.avatarFallback
                     }
                   >
-                    {
-                      bundle.profile
-                        .about
-                    }
-                  </Text>
+                    <Text
+                      style={
+                        styles.avatarInitial
+                      }
+                    >
+                      {String(
+                        bundle.profile
+                          .displayName ||
+                          bundle.profile
+                            .username ||
+                          "L"
+                      )
+                        .charAt(0)
+                        .toUpperCase()}
+                    </Text>
+                  </View>
                 )}
-              </View>
+
+                <View
+                  style={
+                    styles.profileCopy
+                  }
+                >
+                  <Text
+                    style={
+                      styles.profileName
+                    }
+                  >
+                    {bundle.profile
+                      .displayName ||
+                      bundle.profile
+                        .username ||
+                      "Lit Chain Reader"}
+                  </Text>
+
+                  {!!bundle.profile
+                    .about && (
+                    <Text
+                      numberOfLines={2}
+                      style={
+                        styles.profileAbout
+                      }
+                    >
+                      {
+                        bundle.profile
+                          .about
+                      }
+                    </Text>
+                  )}
+
+                  <Text
+                    style={
+                      styles.editHint
+                    }
+                  >
+                    Tap to edit profile
+                  </Text>
+                </View>
+              </Pressable>
             ) : null
           }
           ListEmptyComponent={
             <View style={styles.center}>
-              <Text
-                style={styles.empty}
-              >
+              <Text style={styles.empty}>
                 Nothing here yet.
               </Text>
             </View>
           }
-          renderItem={({ item }) => (
-            <View style={styles.card}>
-              <Text
-                style={styles.eyebrow}
+          renderItem={({ item }) => {
+            const bookLike =
+              tab === "timeline" ||
+              (
+                tab === "saved" &&
+                item.savedType === "book"
+              );
+
+            return (
+              <Pressable
+                disabled={!bookLike}
+                onPress={() =>
+                  openBook(item)
+                }
+                style={styles.card}
               >
-                {tab.toUpperCase()}
-              </Text>
-
-              <Text style={styles.title}>
-                {item.title ||
-                  item.name ||
-                  item.displayName ||
-                  item.username ||
-                  "Lit Chain item"}
-              </Text>
-
-              {!!item.author && (
                 <Text
-                  style={styles.secondary}
+                  style={styles.eyebrow}
                 >
-                  {item.author}
+                  {tab.toUpperCase()}
                 </Text>
-              )}
 
-              {tab === "timeline" && (
-                <Text
-                  style={styles.detail}
-                >
-                  {Math.round(
-                    Number(
-                      item.percentComplete
-                    ) || 0
-                  )}
-                  % complete
+                <Text style={styles.title}>
+                  {item.title ||
+                    item.name ||
+                    item.displayName ||
+                    item.username ||
+                    "Lit Chain item"}
                 </Text>
-              )}
 
-              {tab === "journal" &&
-                !!item.note && (
-                <Text
-                  numberOfLines={5}
-                  style={styles.body}
-                >
-                  {item.note}
-                </Text>
-              )}
+                {!!item.author && (
+                  <Text
+                    style={
+                      styles.secondary
+                    }
+                  >
+                    {item.author}
+                  </Text>
+                )}
 
-              {tab === "saved" &&
-                !!item.note && (
-                <Text
-                  numberOfLines={4}
-                  style={styles.body}
-                >
-                  {item.note}
-                </Text>
-              )}
+                {tab === "timeline" && (
+                  <Text
+                    style={styles.detail}
+                  >
+                    {Math.round(
+                      Number(
+                        item.percentComplete
+                      ) || 0
+                    )}
+                    % complete · Tap to read
+                  </Text>
+                )}
 
-              {tab === "friends" && (
-                <Text
-                  style={styles.detail}
-                >
-                  Friend
-                </Text>
-              )}
-
-              {tab === "groups" && (
-                <Text
-                  style={styles.detail}
-                >
-                  {item.type === "class"
-                    ? "Class"
-                    : "Reading Group"}
-                </Text>
-              )}
-            </View>
-          )}
+                {tab === "friends" && (
+                  <Text
+                    style={styles.detail}
+                  >
+                    Friend
+                  </Text>
+                )}
+              </Pressable>
+            );
+          }}
         />
       )}
 
@@ -298,13 +358,11 @@ export default function LibraryScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor:
-      BRAND.background
+    backgroundColor: BRAND.background
   },
   tabScroll: {
     maxHeight: 58,
-    backgroundColor:
-      BRAND.surface
+    backgroundColor: BRAND.surface
   },
   tabs: {
     paddingHorizontal: 12,
@@ -322,10 +380,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14
   },
   tabActive: {
-    backgroundColor:
-      BRAND.teal,
-    borderColor:
-      BRAND.teal
+    backgroundColor: BRAND.teal,
+    borderColor: BRAND.teal
   },
   tabText: {
     color: BRAND.muted,
@@ -341,9 +397,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     padding: 24
   },
-  error: {
-    color: BRAND.danger
-  },
   empty: {
     color: BRAND.muted
   },
@@ -351,27 +404,54 @@ const styles = StyleSheet.create({
     padding: 16
   },
   profileCard: {
-    backgroundColor:
-      BRAND.surface,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: BRAND.surface,
     borderRadius: 20,
     borderWidth: 1,
     borderColor: BRAND.line,
-    padding: 18,
+    padding: 16,
     marginBottom: 14
+  },
+  avatar: {
+    width: 68,
+    height: 68,
+    borderRadius: 34
+  },
+  avatarFallback: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: BRAND.teal,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  avatarInitial: {
+    color: "#FFFFFF",
+    fontSize: 28,
+    fontWeight: "900"
+  },
+  profileCopy: {
+    flex: 1,
+    marginLeft: 14
   },
   profileName: {
     color: BRAND.ink,
     fontWeight: "900",
-    fontSize: 22
+    fontSize: 21
   },
   profileAbout: {
     color: BRAND.muted,
+    marginTop: 4
+  },
+  editHint: {
+    color: BRAND.tealDark,
     marginTop: 7,
-    lineHeight: 20
+    fontWeight: "800",
+    fontSize: 11
   },
   card: {
-    backgroundColor:
-      BRAND.surface,
+    backgroundColor: BRAND.surface,
     borderWidth: 1,
     borderColor: BRAND.line,
     borderRadius: 18,
@@ -398,10 +478,5 @@ const styles = StyleSheet.create({
     color: BRAND.tealDark,
     marginTop: 12,
     fontWeight: "800"
-  },
-  body: {
-    color: "#425759",
-    marginTop: 10,
-    lineHeight: 20
   }
 });
