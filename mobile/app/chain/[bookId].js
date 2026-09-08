@@ -1,5 +1,7 @@
 import {
+  useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState
 } from "react";
@@ -35,44 +37,113 @@ import {
 import { BRAND } from "../../../shared/brand";
 
 export default function BookChainScreen() {
-  const params =
-    useLocalSearchParams();
+  const params = useLocalSearchParams();
 
-  const bookId =
-    String(params.bookId || "");
+  const bookId = String(params.bookId || "");
+  const title = String(params.title || "Book");
+  const author = String(params.author || "");
+  const filter = String(params.filter || "all");
 
-  const title =
-    String(params.title || "Book");
+  const [allEntries, setAllEntries] = useState([]);
+  const [levels, setLevels] = useState([]);
+  const [votes, setVotes] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState("");
 
-  const author =
-    String(params.author || "");
+  const selectedEntryRef = useRef(null);
 
-  const filter =
-    String(params.filter || "all");
+  const depth = levels.length;
+  const currentLevel = levels[depth - 1] || [];
 
-  const [allEntries, setAllEntries] =
-    useState([]);
+  const onViewableItemsChanged = useRef(
+    ({ viewableItems }) => {
+      selectedEntryRef.current =
+        viewableItems[0]?.item || null;
+    }
+  ).current;
 
-  const [levels, setLevels] =
-    useState([]);
+  const viewabilityConfig = useRef({
+    itemVisiblePercentThreshold: 55
+  }).current;
 
-  const [votes, setVotes] =
-    useState({});
+  const goBackDepth = useCallback(() => {
+    setStatus("");
 
-  const [loading, setLoading] =
-    useState(true);
+    setLevels((current) => {
+      if (current.length <= 1) {
+        router.replace("/home");
+        return current;
+      }
 
-  const [status, setStatus] =
-    useState("");
+      const next = current.slice(0, -1);
+      selectedEntryRef.current =
+        next[next.length - 1]?.[0] || null;
+      return next;
+    });
+  }, []);
 
-  const selectedEntryRef =
-    useRef(null);
+  const goDeeper = useCallback(
+    (entry) => {
+      const branches =
+        getPublicBranches(
+          allEntries,
+          entry
+        );
+
+      if (!branches.length) {
+        setStatus("End of this branch.");
+        return;
+      }
+
+      selectedEntryRef.current =
+        branches[0] || null;
+
+      setLevels((current) => [
+        ...current,
+        branches
+      ]);
+
+      setStatus("");
+    },
+    [allEntries]
+  );
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder:
+          (_, gesture) =>
+            Math.abs(gesture.dx) > 18 &&
+            Math.abs(gesture.dx) >
+              Math.abs(gesture.dy) * 1.2,
+
+        onPanResponderRelease:
+          (_, gesture) => {
+            if (gesture.dx > 60) {
+              goBackDepth();
+              return;
+            }
+
+            if (
+              gesture.dx < -60 &&
+              selectedEntryRef.current
+            ) {
+              goDeeper(
+                selectedEntryRef.current
+              );
+            }
+          }
+      }),
+    [goBackDepth, goDeeper]
+  );
 
   useEffect(() => {
     let active = true;
 
     (async () => {
       try {
+        setLoading(true);
+
         const feed =
           await getChainFeedByFilter(
             filter
@@ -80,24 +151,20 @@ export default function BookChainScreen() {
 
         if (!active) return;
 
-        setAllEntries(feed);
-
         const firstLevel =
           getDirectBookEntries(
             feed,
             bookId
           );
 
+        setAllEntries(feed);
         setLevels([firstLevel]);
-
-        setVotes(
-          await getMyChainVotes(
-            feed
-          )
-        );
-
         selectedEntryRef.current =
           firstLevel[0] || null;
+
+        setVotes(
+          await getMyChainVotes(feed)
+        );
       } catch (error) {
         console.error(error);
 
@@ -118,84 +185,11 @@ export default function BookChainScreen() {
     };
   }, [bookId, filter]);
 
-  const depth = levels.length;
-  const currentLevel =
-    levels[depth - 1] || [];
-
-  function goBackDepth() {
-    if (levels.length <= 1) {
-      router.replace("/home");
-      return;
-    }
-
-    setLevels((current) =>
-      current.slice(0, -1)
-    );
-
-    setStatus("");
-  }
-
-  function goDeeper(entry) {
-    const branches =
-      getPublicBranches(
-        allEntries,
-        entry
-      );
-
-    if (!branches.length) {
-      setStatus(
-        "End of this branch."
-      );
-      return;
-    }
-
-    setLevels((current) => [
-      ...current,
-      branches
-    ]);
-
-    selectedEntryRef.current =
-      branches[0];
-
-    setStatus("");
-  }
-
-  const panResponder =
-    useRef(
-      PanResponder.create({
-        onMoveShouldSetPanResponder:
-          (_, gesture) =>
-            Math.abs(gesture.dx) >
-              18 &&
-            Math.abs(gesture.dx) >
-              Math.abs(gesture.dy) *
-                1.2,
-
-        onPanResponderRelease:
-          (_, gesture) => {
-            if (gesture.dx > 60) {
-              goBackDepth();
-              return;
-            }
-
-            if (
-              gesture.dx < -60 &&
-              selectedEntryRef.current
-            ) {
-              goDeeper(
-                selectedEntryRef.current
-              );
-            }
-          }
-      })
-    ).current;
-
   async function handleVote(
     entry,
     direction
   ) {
-    const key =
-      chainEntryKey(entry);
+    const key = chainEntryKey(entry);
 
     try {
       const result =
@@ -210,8 +204,7 @@ export default function BookChainScreen() {
       }));
 
       const patch = (candidate) =>
-        chainEntryKey(candidate) ===
-        key
+        chainEntryKey(candidate) === key
           ? {
               ...candidate,
               chainUpCount:
@@ -235,7 +228,7 @@ export default function BookChainScreen() {
     } catch (error) {
       setStatus(
         error?.message ||
-        "Vote could not be updated."
+          "Vote could not be updated."
       );
     }
   }
@@ -244,9 +237,7 @@ export default function BookChainScreen() {
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.center}>
-          <ActivityIndicator
-            size="large"
-          />
+          <ActivityIndicator size="large" />
         </View>
       </SafeAreaView>
     );
@@ -257,31 +248,28 @@ export default function BookChainScreen() {
       style={styles.safe}
       {...panResponder.panHandlers}
     >
-      <View style={styles.backRow}>
-        <Pressable
-          onPress={goBackDepth}
-        >
+      <AppHeader
+        title={title}
+        subtitle={
+          author
+            ? `${author} · Level ${Math.max(depth, 1)}`
+            : `Level ${Math.max(depth, 1)}`
+        }
+      />
+
+      <View style={styles.navRow}>
+        <Pressable onPress={goBackDepth}>
           <Text style={styles.back}>
-            ‹{" "}
-            {depth <= 1
+            ‹ {depth <= 1
               ? "Books"
               : `Level ${depth - 1}`}
           </Text>
         </Pressable>
 
         <Text style={styles.level}>
-          LEVEL {depth}
+          LEVEL {Math.max(depth, 1)}
         </Text>
       </View>
-
-      <AppHeader
-        title={title}
-        subtitle={
-          author
-            ? `${author} · Level ${depth}`
-            : `Level ${depth}`
-        }
-      />
 
       {!!status && (
         <Text style={styles.status}>
@@ -296,23 +284,12 @@ export default function BookChainScreen() {
           chainEntryKey(item)
         }
         pagingEnabled
-        showsVerticalScrollIndicator={
-          false
-        }
+        showsVerticalScrollIndicator={false}
         onViewableItemsChanged={
-          useRef(
-            ({ viewableItems }) => {
-              selectedEntryRef.current =
-                viewableItems[0]?.item ||
-                null;
-            }
-          ).current
+          onViewableItemsChanged
         }
         viewabilityConfig={
-          useRef({
-            itemVisiblePercentThreshold:
-              55
-          }).current
+          viewabilityConfig
         }
         ListEmptyComponent={
           <View style={styles.center}>
@@ -344,8 +321,7 @@ export default function BookChainScreen() {
                 )}
 
                 <Text style={styles.note}>
-                  {item.note ||
-                    "Linked note"}
+                  {item.note || "Linked note"}
                 </Text>
 
                 <View style={styles.actions}>
@@ -403,9 +379,7 @@ export default function BookChainScreen() {
                   onPress={() =>
                     goDeeper(item)
                   }
-                  disabled={
-                    !branches.length
-                  }
+                  disabled={!branches.length}
                   style={[
                     styles.deeper,
                     !branches.length &&
@@ -438,8 +412,7 @@ export default function BookChainScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor:
-      BRAND.background
+    backgroundColor: BRAND.background
   },
   center: {
     flex: 1,
@@ -447,15 +420,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     padding: 24
   },
-  backRow: {
-    minHeight: 46,
+  navRow: {
+    minHeight: 44,
     paddingHorizontal: 16,
-    backgroundColor:
-      BRAND.surface,
+    backgroundColor: BRAND.surface,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent:
-      "space-between"
+    justifyContent: "space-between",
+    borderBottomWidth: 1,
+    borderBottomColor: BRAND.line
   },
   back: {
     color: BRAND.tealDark,
@@ -481,8 +454,7 @@ const styles = StyleSheet.create({
     justifyContent: "center"
   },
   card: {
-    backgroundColor:
-      BRAND.surface,
+    backgroundColor: BRAND.surface,
     borderWidth: 1,
     borderColor: BRAND.line,
     borderRadius: 24,
@@ -515,8 +487,7 @@ const styles = StyleSheet.create({
     justifyContent: "center"
   },
   voteActive: {
-    backgroundColor:
-      BRAND.teal,
+    backgroundColor: BRAND.teal,
     borderColor: BRAND.teal
   },
   voteText: {
@@ -532,8 +503,7 @@ const styles = StyleSheet.create({
     marginTop: 10
   },
   deeper: {
-    backgroundColor:
-      BRAND.yellow,
+    backgroundColor: BRAND.yellow,
     minHeight: 48,
     borderRadius: 14,
     marginTop: 18,
