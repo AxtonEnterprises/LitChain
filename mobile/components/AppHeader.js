@@ -1,21 +1,36 @@
-import { StyleSheet, Text, View } from "react-native";
+import {
+  Image,
+  StyleSheet,
+  Text,
+  View
+} from "react-native";
 
-export default function AppHeader({ title = "The Chain", subtitle = "" }) {
+import { BRAND } from "../../shared/brand";
+
+export default function AppHeader({
+  title = "The Chain",
+  subtitle = ""
+}) {
   return (
     <View style={styles.header}>
       <View style={styles.brandRow}>
-        <View style={styles.mark}>
-          <Text style={styles.markText}>LC</Text>
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.brand}>Lit Chain</Text>
-          <Text style={styles.tagline}>Read. Connect. Continue the chain.</Text>
-        </View>
+        <Image
+          source={{ uri: BRAND.logoHorizontal }}
+          resizeMode="contain"
+          style={styles.logo}
+        />
       </View>
 
       <View style={styles.titleRow}>
-        <Text style={styles.title}>{title}</Text>
-        {!!subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
+        <Text style={styles.title}>
+          {title}
+        </Text>
+
+        {!!subtitle && (
+          <Text style={styles.subtitle}>
+            {subtitle}
+          </Text>
+        )}
       </View>
     </View>
   );
@@ -23,51 +38,33 @@ export default function AppHeader({ title = "The Chain", subtitle = "" }) {
 
 const styles = StyleSheet.create({
   header: {
-    backgroundColor: "#ffffff",
+    backgroundColor: BRAND.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#dce7e7",
+    borderBottomColor: BRAND.line,
     paddingHorizontal: 18,
     paddingTop: 8,
     paddingBottom: 12
   },
   brandRow: {
-    flexDirection: "row",
-    alignItems: "center"
+    minHeight: 52,
+    justifyContent: "center"
   },
-  mark: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
-    backgroundColor: "#3bb6b1",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 10
-  },
-  markText: {
-    color: "#ffffff",
-    fontWeight: "900"
-  },
-  brand: {
-    color: "#162224",
-    fontWeight: "900",
-    fontSize: 18
-  },
-  tagline: {
-    color: "#728487",
-    fontSize: 10,
-    marginTop: 1
+  logo: {
+    width: 220,
+    height: 48,
+    alignSelf: "flex-start"
   },
   titleRow: {
-    marginTop: 12
+    marginTop: 8
   },
   title: {
-    color: "#162224",
+    color: BRAND.ink,
     fontWeight: "900",
-    fontSize: 26
+    fontSize: 28
   },
   subtitle: {
-    marginTop: 3,
-    color: "#6c7e81",
-    fontSize: 12
+    marginTop: 4,
+    color: BRAND.muted,
+    fontSize: 13
   }
 });
