@@ -1,12 +1,12 @@
 import {
   useEffect,
-  useMemo,
   useRef,
   useState
 } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  PanResponder,
   Pressable,
   SafeAreaView,
   StyleSheet,
@@ -28,41 +28,55 @@ import {
   getDirectBookEntries,
   getMyChainVotes,
   getPublicBranches,
-  getPublicChainFeed,
+  getChainFeedByFilter,
   voteOnChainEntry
 } from "../../services/chain";
 
+import { BRAND } from "../../../shared/brand";
+
 export default function BookChainScreen() {
-  const params = useLocalSearchParams();
+  const params =
+    useLocalSearchParams();
 
-  const bookId = String(
-    params.bookId || ""
-  );
+  const bookId =
+    String(params.bookId || "");
 
-  const title = String(
-    params.title || "Book"
-  );
+  const title =
+    String(params.title || "Book");
 
-  const author = String(
-    params.author || ""
-  );
+  const author =
+    String(params.author || "");
 
-  const [allEntries, setAllEntries] = useState([]);
-  const [levels, setLevels] = useState([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [votes, setVotes] = useState({});
-  const [voteLoading, setVoteLoading] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [status, setStatus] = useState("");
+  const filter =
+    String(params.filter || "all");
 
-  const touchStart = useRef(null);
+  const [allEntries, setAllEntries] =
+    useState([]);
+
+  const [levels, setLevels] =
+    useState([]);
+
+  const [votes, setVotes] =
+    useState({});
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [status, setStatus] =
+    useState("");
+
+  const selectedEntryRef =
+    useRef(null);
 
   useEffect(() => {
     let active = true;
 
     (async () => {
       try {
-        const feed = await getPublicChainFeed();
+        const feed =
+          await getChainFeedByFilter(
+            filter
+          );
 
         if (!active) return;
 
@@ -77,8 +91,13 @@ export default function BookChainScreen() {
         setLevels([firstLevel]);
 
         setVotes(
-          await getMyChainVotes(feed)
+          await getMyChainVotes(
+            feed
+          )
         );
+
+        selectedEntryRef.current =
+          firstLevel[0] || null;
       } catch (error) {
         console.error(error);
 
@@ -88,33 +107,33 @@ export default function BookChainScreen() {
           );
         }
       } finally {
-        if (active) setLoading(false);
+        if (active) {
+          setLoading(false);
+        }
       }
     })();
 
     return () => {
       active = false;
     };
-  }, [bookId]);
+  }, [bookId, filter]);
 
   const depth = levels.length;
-
   const currentLevel =
     levels[depth - 1] || [];
 
-  const currentEntry =
-    currentLevel[currentIndex] || null;
+  function goBackDepth() {
+    if (levels.length <= 1) {
+      router.replace("/home");
+      return;
+    }
 
-  const branchCount = useMemo(
-    () =>
-      currentEntry
-        ? getPublicBranches(
-            allEntries,
-            currentEntry
-          ).length
-        : 0,
-    [allEntries, currentEntry]
-  );
+    setLevels((current) =>
+      current.slice(0, -1)
+    );
+
+    setStatus("");
+  }
 
   function goDeeper(entry) {
     const branches =
@@ -125,7 +144,7 @@ export default function BookChainScreen() {
 
     if (!branches.length) {
       setStatus(
-        "No further public links from this note yet."
+        "End of this branch."
       );
       return;
     }
@@ -135,69 +154,50 @@ export default function BookChainScreen() {
       branches
     ]);
 
-    setCurrentIndex(0);
+    selectedEntryRef.current =
+      branches[0];
+
     setStatus("");
   }
 
-  function goBackDepth() {
-    if (levels.length <= 1) {
-      router.back();
-      return;
-    }
+  const panResponder =
+    useRef(
+      PanResponder.create({
+        onMoveShouldSetPanResponder:
+          (_, gesture) =>
+            Math.abs(gesture.dx) >
+              18 &&
+            Math.abs(gesture.dx) >
+              Math.abs(gesture.dy) *
+                1.2,
 
-    setLevels((current) =>
-      current.slice(0, -1)
-    );
+        onPanResponderRelease:
+          (_, gesture) => {
+            if (gesture.dx > 60) {
+              goBackDepth();
+              return;
+            }
 
-    setCurrentIndex(0);
-    setStatus("");
-  }
+            if (
+              gesture.dx < -60 &&
+              selectedEntryRef.current
+            ) {
+              goDeeper(
+                selectedEntryRef.current
+              );
+            }
+          }
+      })
+    ).current;
 
-  function handleTouchStart(event) {
-    const point = event.nativeEvent;
-
-    touchStart.current = {
-      x: point.pageX,
-      y: point.pageY
-    };
-  }
-
-  function handleTouchEnd(event, entry) {
-    if (!touchStart.current) return;
-
-    const point = event.nativeEvent;
-
-    const dx =
-      point.pageX -
-      touchStart.current.x;
-
-    const dy =
-      point.pageY -
-      touchStart.current.y;
-
-    touchStart.current = null;
-
-    if (
-      Math.abs(dx) <
-      Math.abs(dy) * 1.3
-    ) {
-      return;
-    }
-
-    if (dx < -60) {
-      goDeeper(entry);
-    } else if (dx > 60) {
-      goBackDepth();
-    }
-  }
-
-  async function handleVote(entry, direction) {
-    const key = chainEntryKey(entry);
+  async function handleVote(
+    entry,
+    direction
+  ) {
+    const key =
+      chainEntryKey(entry);
 
     try {
-      setVoteLoading(key);
-      setStatus("");
-
       const result =
         await voteOnChainEntry(
           entry,
@@ -209,46 +209,34 @@ export default function BookChainScreen() {
         [key]: result.direction
       }));
 
+      const patch = (candidate) =>
+        chainEntryKey(candidate) ===
+        key
+          ? {
+              ...candidate,
+              chainUpCount:
+                result.chainUpCount,
+              chainDownCount:
+                result.chainDownCount,
+              chainScore:
+                result.chainScore
+            }
+          : candidate;
+
       setAllEntries((current) =>
-        current.map((candidate) =>
-          chainEntryKey(candidate) === key
-            ? {
-                ...candidate,
-                chainUpCount:
-                  result.chainUpCount,
-                chainDownCount:
-                  result.chainDownCount,
-                chainScore:
-                  result.chainScore
-              }
-            : candidate
-        )
+        current.map(patch)
       );
 
-      setLevels((currentLevels) =>
-        currentLevels.map((level) =>
-          level.map((candidate) =>
-            chainEntryKey(candidate) === key
-              ? {
-                  ...candidate,
-                  chainUpCount:
-                    result.chainUpCount,
-                  chainDownCount:
-                    result.chainDownCount,
-                  chainScore:
-                    result.chainScore
-                }
-              : candidate
-          )
+      setLevels((current) =>
+        current.map((level) =>
+          level.map(patch)
         )
       );
     } catch (error) {
       setStatus(
         error?.message ||
-        "The Chain vote could not be updated."
+        "Vote could not be updated."
       );
-    } finally {
-      setVoteLoading("");
     }
   }
 
@@ -256,27 +244,32 @@ export default function BookChainScreen() {
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.center}>
-          <ActivityIndicator size="large" />
-          <Text style={styles.muted}>
-            Loading links…
-          </Text>
+          <ActivityIndicator
+            size="large"
+          />
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView
+      style={styles.safe}
+      {...panResponder.panHandlers}
+    >
       <View style={styles.backRow}>
-        <Pressable onPress={goBackDepth}>
-          <Text style={styles.backText}>
-            ‹ {depth > 1
-              ? `Level ${depth - 1}`
-              : "Books"}
+        <Pressable
+          onPress={goBackDepth}
+        >
+          <Text style={styles.back}>
+            ‹{" "}
+            {depth <= 1
+              ? "Books"
+              : `Level ${depth - 1}`}
           </Text>
         </Pressable>
 
-        <Text style={styles.depthText}>
+        <Text style={styles.level}>
           LEVEL {depth}
         </Text>
       </View>
@@ -291,55 +284,50 @@ export default function BookChainScreen() {
       />
 
       {!!status && (
-        <View style={styles.statusBar}>
-          <Text style={styles.statusText}>
-            {status}
-          </Text>
-        </View>
+        <Text style={styles.status}>
+          {status}
+        </Text>
       )}
 
       <FlatList
-        key={`level-${depth}`}
         data={currentLevel}
+        key={`depth-${depth}`}
         keyExtractor={(item) =>
           chainEntryKey(item)
         }
         pagingEnabled
-        decelerationRate="fast"
-        showsVerticalScrollIndicator={false}
-        onMomentumScrollEnd={(event) => {
-          const height =
-            event.nativeEvent.layoutMeasurement
-              .height || 1;
-
-          const nextIndex = Math.round(
-            event.nativeEvent.contentOffset.y /
-            height
-          );
-
-          setCurrentIndex(
-            Math.max(
-              0,
-              Math.min(
-                nextIndex,
-                currentLevel.length - 1
-              )
-            )
-          );
-        }}
+        showsVerticalScrollIndicator={
+          false
+        }
+        onViewableItemsChanged={
+          useRef(
+            ({ viewableItems }) => {
+              selectedEntryRef.current =
+                viewableItems[0]?.item ||
+                null;
+            }
+          ).current
+        }
+        viewabilityConfig={
+          useRef({
+            itemVisiblePercentThreshold:
+              55
+          }).current
+        }
         ListEmptyComponent={
           <View style={styles.center}>
-            <Text style={styles.emptyTitle}>
-              No links yet
-            </Text>
-            <Text style={styles.muted}>
-              This level has no public links.
+            <Text style={styles.empty}>
+              No links at this level.
             </Text>
           </View>
         }
-        renderItem={({ item, index }) => {
-          const key = chainEntryKey(item);
-          const myVote = votes[key] || 0;
+        renderItem={({ item }) => {
+          const key =
+            chainEntryKey(item);
+
+          const myVote =
+            votes[key] || 0;
+
           const branches =
             getPublicBranches(
               allEntries,
@@ -347,24 +335,8 @@ export default function BookChainScreen() {
             );
 
           return (
-            <View
-              style={styles.notePage}
-              onTouchStart={handleTouchStart}
-              onTouchEnd={(event) =>
-                handleTouchEnd(
-                  event,
-                  item
-                )
-              }
-            >
-              <View style={styles.levelBadge}>
-                <Text style={styles.levelBadgeText}>
-                  LEVEL {depth} · {index + 1} /{" "}
-                  {currentLevel.length}
-                </Text>
-              </View>
-
-              <View style={styles.noteCard}>
+            <View style={styles.page}>
+              <View style={styles.card}>
                 {!!item.paragraphPreview && (
                   <Text style={styles.quote}>
                     “{item.paragraphPreview}”
@@ -376,41 +348,22 @@ export default function BookChainScreen() {
                     "Linked note"}
                 </Text>
 
-                <View style={styles.meta}>
-                  <Text style={styles.metaText}>
-                    {item.reader?.displayName ||
-                      item.reader?.username ||
-                      item.userName ||
-                      "Lit Chain reader"}
-                  </Text>
-
-                  {!!item.paragraphNumber && (
-                    <Text style={styles.metaText}>
-                      Paragraph{" "}
-                      {item.paragraphNumber}
-                    </Text>
-                  )}
-                </View>
-
                 <View style={styles.actions}>
                   <Pressable
-                    disabled={
-                      voteLoading === key
-                    }
                     onPress={() =>
                       handleVote(item, 1)
                     }
                     style={[
-                      styles.voteButton,
+                      styles.vote,
                       myVote === 1 &&
-                        styles.voteSelected
+                        styles.voteActive
                     ]}
                   >
                     <Text
                       style={[
                         styles.voteText,
                         myVote === 1 &&
-                          styles.voteSelectedText
+                          styles.voteTextActive
                       ]}
                     >
                       🔗 Link{" "}
@@ -419,23 +372,20 @@ export default function BookChainScreen() {
                   </Pressable>
 
                   <Pressable
-                    disabled={
-                      voteLoading === key
-                    }
                     onPress={() =>
                       handleVote(item, -1)
                     }
                     style={[
-                      styles.voteButton,
+                      styles.vote,
                       myVote === -1 &&
-                        styles.voteSelected
+                        styles.voteActive
                     ]}
                   >
                     <Text
                       style={[
                         styles.voteText,
                         myVote === -1 &&
-                          styles.voteSelectedText
+                          styles.voteTextActive
                       ]}
                     >
                       ⛓ Unlink{" "}
@@ -450,30 +400,31 @@ export default function BookChainScreen() {
                 </Text>
 
                 <Pressable
-                  disabled={!branches.length}
                   onPress={() =>
                     goDeeper(item)
                   }
+                  disabled={
+                    !branches.length
+                  }
                   style={[
-                    styles.branchButton,
+                    styles.deeper,
                     !branches.length &&
-                      styles.branchButtonDisabled
+                      styles.disabled
                   ]}
                 >
-                  <Text style={styles.branchButtonText}>
+                  <Text
+                    style={styles.deeperText}
+                  >
                     {branches.length
-                      ? `Explore ${branches.length} deeper ${
-                          branches.length === 1
-                            ? "link"
-                            : "links"
-                        } →`
-                      : "End of this branch"}
+                      ? `Explore ${branches.length} deeper`
+                      : "End of branch"}
                   </Text>
                 </Pressable>
 
-                <Text style={styles.swipeHint}>
-                  Swipe left deeper · Swipe right back ·
-                  Swipe up/down between links
+                <Text style={styles.hint}>
+                  Swipe right to go back ·
+                  swipe left deeper ·
+                  swipe vertically between links
                 </Text>
               </View>
             </View>
@@ -487,151 +438,119 @@ export default function BookChainScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: "#f6fafa"
+    backgroundColor:
+      BRAND.background
   },
   center: {
     flex: 1,
-    padding: 28,
     alignItems: "center",
-    justifyContent: "center"
-  },
-  muted: {
-    marginTop: 10,
-    color: "#6c7e81",
-    textAlign: "center"
+    justifyContent: "center",
+    padding: 24
   },
   backRow: {
     minHeight: 46,
     paddingHorizontal: 16,
-    backgroundColor: "#ffffff",
+    backgroundColor:
+      BRAND.surface,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between"
+    justifyContent:
+      "space-between"
   },
-  backText: {
-    color: "#287c79",
+  back: {
+    color: BRAND.tealDark,
     fontWeight: "900"
   },
-  depthText: {
-    color: "#829194",
-    fontSize: 11,
+  level: {
+    color: BRAND.muted,
     fontWeight: "900",
-    letterSpacing: 1
+    fontSize: 11
   },
-  statusBar: {
-    backgroundColor: "#fff8df",
-    padding: 9
-  },
-  statusText: {
+  status: {
     textAlign: "center",
-    color: "#6d5a16",
-    fontSize: 12
+    padding: 8,
+    color: "#6D5A16",
+    backgroundColor: "#FFF8DF"
   },
-  emptyTitle: {
-    color: "#162224",
-    fontWeight: "900",
-    fontSize: 22
+  empty: {
+    color: BRAND.muted
   },
-  notePage: {
+  page: {
     minHeight: 620,
     padding: 18,
     justifyContent: "center"
   },
-  levelBadge: {
-    alignSelf: "center",
-    backgroundColor: "#e4f5f4",
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    marginBottom: 14
-  },
-  levelBadgeText: {
-    color: "#287c79",
-    fontWeight: "900",
-    fontSize: 11,
-    letterSpacing: 1
-  },
-  noteCard: {
-    backgroundColor: "#ffffff",
+  card: {
+    backgroundColor:
+      BRAND.surface,
     borderWidth: 1,
-    borderColor: "#dce7e7",
+    borderColor: BRAND.line,
     borderRadius: 24,
     padding: 24
   },
   quote: {
-    color: "#5f7275",
+    color: BRAND.muted,
     fontStyle: "italic",
-    lineHeight: 23,
-    fontSize: 15
+    lineHeight: 23
   },
   note: {
-    marginTop: 18,
-    color: "#162224",
+    color: BRAND.ink,
     fontSize: 22,
     lineHeight: 31,
-    fontWeight: "700"
-  },
-  meta: {
-    marginTop: 24,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: "#e5eded",
-    gap: 5
-  },
-  metaText: {
-    color: "#6c7e81",
-    fontSize: 13
+    fontWeight: "700",
+    marginTop: 18
   },
   actions: {
-    marginTop: 18,
     flexDirection: "row",
-    gap: 10
+    gap: 10,
+    marginTop: 24
   },
-  voteButton: {
+  vote: {
     flex: 1,
     borderWidth: 1,
-    borderColor: "#cddddd",
+    borderColor: BRAND.line,
     borderRadius: 14,
-    paddingVertical: 12,
-    alignItems: "center"
+    minHeight: 48,
+    alignItems: "center",
+    justifyContent: "center"
   },
-  voteSelected: {
-    backgroundColor: "#3bb6b1",
-    borderColor: "#3bb6b1"
+  voteActive: {
+    backgroundColor:
+      BRAND.teal,
+    borderColor: BRAND.teal
   },
   voteText: {
-    color: "#365154",
+    color: BRAND.ink,
     fontWeight: "900"
   },
-  voteSelectedText: {
-    color: "#ffffff"
+  voteTextActive: {
+    color: "#FFFFFF"
   },
   score: {
     textAlign: "center",
-    color: "#718285",
-    marginTop: 10,
-    fontSize: 12
+    color: BRAND.muted,
+    marginTop: 10
   },
-  branchButton: {
-    marginTop: 18,
+  deeper: {
+    backgroundColor:
+      BRAND.yellow,
     minHeight: 48,
     borderRadius: 14,
-    backgroundColor: "#FFC00E",
+    marginTop: 18,
     alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 14
+    justifyContent: "center"
   },
-  branchButtonDisabled: {
-    opacity: 0.45
+  disabled: {
+    opacity: 0.4
   },
-  branchButtonText: {
-    color: "#162224",
+  deeperText: {
+    color: BRAND.ink,
     fontWeight: "900"
   },
-  swipeHint: {
-    marginTop: 14,
+  hint: {
+    color: BRAND.muted,
+    fontSize: 11,
     textAlign: "center",
-    color: "#8b9a9c",
-    fontSize: 11
+    marginTop: 14
   }
 });
