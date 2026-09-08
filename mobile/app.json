@@ -8,14 +8,21 @@
     "scheme": "litchain",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "backgroundColor": "#F4F8F8",
     "android": {
-      "package": "org.theliteraturefoundation.litchain"
+      "package": "org.theliteraturefoundation.litchain",
+      "versionCode": 2,
+      "adaptiveIcon": {
+        "backgroundColor": "#F4F8F8"
+      }
     },
     "ios": {
       "bundleIdentifier": "org.theliteraturefoundation.litchain",
       "supportsTablet": true
     },
-    "plugins": ["expo-router"],
+    "plugins": [
+      "expo-router"
+    ],
     "extra": {
       "eas": {
         "projectId": "67eb8faa-536a-4b86-8b99-7602fa9da15d"
