@@ -4,11 +4,7 @@
   },
   "build": {
     "preview": {
-      "distribution": "internal",
-      "android": {
-        "withoutCredentials": true,
-        "gradleCommand": ":app:assembleDebug"
-      }
+      "distribution": "internal"
     },
     "production": {
       "android": {
