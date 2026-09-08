@@ -1,39 +1,52 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  Pressable,
+  StyleSheet,
+  Text,
+  View
+} from "react-native";
 import { router } from "expo-router";
 
-const items = [
-  ["chain", "Chain", "/home"],
-  ["discover", "Discover", "/discover"],
-  ["search", "Search", "/search"],
-  ["notes", "Notes", "/notes"],
-  ["profile", "Profile", "/profile"]
-];
+import { PRIMARY_NAV } from "../../shared/navigation";
+
+const symbols = {
+  discover: "◇",
+  chain: "◉",
+  groups: "◎",
+  library: "▤"
+};
 
 export default function BottomNav({ active = "chain" }) {
   return (
     <View style={styles.wrap}>
-      {items.map(([key, label, href]) => {
-        const selected = key === active;
+      {PRIMARY_NAV.map((item) => {
+        const selected = item.key === active;
 
         return (
           <Pressable
-            key={key}
+            key={item.key}
             onPress={() => {
-              if (!selected) router.replace(href);
+              if (!selected) {
+                router.replace(item.mobilePath);
+              }
             }}
             style={styles.item}
           >
-            <Text style={[
-              styles.dot,
-              selected && styles.dotActive
-            ]}>
-              {selected ? "●" : "○"}
+            <Text
+              style={[
+                styles.icon,
+                selected && styles.iconActive
+              ]}
+            >
+              {symbols[item.key] || "○"}
             </Text>
-            <Text style={[
-              styles.label,
-              selected && styles.labelActive
-            ]}>
-              {label}
+
+            <Text
+              style={[
+                styles.label,
+                selected && styles.labelActive
+              ]}
+            >
+              {item.label}
             </Text>
           </Pressable>
         );
@@ -44,10 +57,10 @@ export default function BottomNav({ active = "chain" }) {
 
 const styles = StyleSheet.create({
   wrap: {
-    minHeight: 74,
+    minHeight: 72,
     paddingHorizontal: 8,
-    paddingTop: 8,
-    paddingBottom: 10,
+    paddingTop: 7,
+    paddingBottom: 9,
     borderTopWidth: 1,
     borderTopColor: "#dce7e7",
     backgroundColor: "#ffffff",
@@ -60,11 +73,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center"
   },
-  dot: {
-    fontSize: 18,
-    color: "#8aa0a2"
+  icon: {
+    fontSize: 20,
+    color: "#87999c"
   },
-  dotActive: {
+  iconActive: {
     color: "#3bb6b1"
   },
   label: {
@@ -74,6 +87,6 @@ const styles = StyleSheet.create({
   },
   labelActive: {
     color: "#162224",
-    fontWeight: "800"
+    fontWeight: "900"
   }
 });
