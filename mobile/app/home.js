@@ -6,7 +6,6 @@ import {
 } from "react";
 import {
   ActivityIndicator,
-  Dimensions,
   FlatList,
   Image,
   Pressable,
@@ -25,33 +24,62 @@ import BottomNav from "../components/BottomNav";
 
 import {
   buildSourceBooks,
-  getPublicChainFeed,
+  getChainFeedByFilter,
   gutenbergCoverUrl
 } from "../services/chain";
 
-const SCREEN_HEIGHT = Dimensions.get("window").height;
+import { CHAIN_FILTERS } from "../../shared/chainFilters";
+import { BRAND } from "../../shared/brand";
 
 export default function HomeScreen() {
-  const [entries, setEntries] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState("");
+  const [filter, setFilter] =
+    useState("all");
+
+  const [entries, setEntries] =
+    useState([]);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [refreshing, setRefreshing] =
+    useState(false);
+
+  const [error, setError] =
+    useState("");
+
   const touchStart = useRef(null);
 
   useEffect(() => {
-    return onAuthStateChanged(auth, (user) => {
-      if (!user) router.replace("/login");
-    });
+    return onAuthStateChanged(
+      auth,
+      (user) => {
+        if (!user) {
+          router.replace("/login");
+        }
+      }
+    );
   }, []);
 
-  async function load({ refresh = false } = {}) {
+  async function load({
+    refresh = false
+  } = {}) {
     try {
-      refresh ? setRefreshing(true) : setLoading(true);
+      refresh
+        ? setRefreshing(true)
+        : setLoading(true);
+
       setError("");
-      setEntries(await getPublicChainFeed());
-    } catch (e) {
-      console.error(e);
-      setError("The Chain could not be loaded.");
+
+      setEntries(
+        await getChainFeedByFilter(
+          filter
+        )
+      );
+    } catch (error) {
+      console.error(error);
+      setError(
+        "The Chain could not be loaded."
+      );
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -60,7 +88,7 @@ export default function HomeScreen() {
 
   useEffect(() => {
     load();
-  }, []);
+  }, [filter]);
 
   const books = useMemo(
     () => buildSourceBooks(entries),
@@ -73,52 +101,50 @@ export default function HomeScreen() {
       params: {
         bookId: item.bookId,
         title: item.title,
-        author: item.author
+        author: item.author,
+        filter
       }
     });
   }
 
   function handleTouchStart(event) {
-    const point = event.nativeEvent;
+    const point =
+      event.nativeEvent;
+
     touchStart.current = {
       x: point.pageX,
       y: point.pageY
     };
   }
 
-  function handleTouchEnd(event, item) {
-    if (!touchStart.current) return;
+  function handleTouchEnd(
+    event,
+    item
+  ) {
+    if (!touchStart.current) {
+      return;
+    }
 
-    const point = event.nativeEvent;
-    const dx = point.pageX - touchStart.current.x;
-    const dy = point.pageY - touchStart.current.y;
+    const point =
+      event.nativeEvent;
+
+    const dx =
+      point.pageX -
+      touchStart.current.x;
+
+    const dy =
+      point.pageY -
+      touchStart.current.y;
 
     touchStart.current = null;
 
     if (
       dx < -65 &&
-      Math.abs(dx) > Math.abs(dy) * 1.3
+      Math.abs(dx) >
+        Math.abs(dy) * 1.3
     ) {
       openBookChain(item);
     }
-  }
-
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.safe}>
-        <AppHeader
-          title="The Chain"
-          subtitle="Public literature chains"
-        />
-        <View style={styles.center}>
-          <ActivityIndicator size="large" />
-          <Text style={styles.muted}>
-            Loading The Chain…
-          </Text>
-        </View>
-        <BottomNav active="chain" />
-      </SafeAreaView>
-    );
   }
 
   return (
@@ -126,98 +152,175 @@ export default function HomeScreen() {
       <AppHeader
         title="The Chain"
         subtitle={`${books.length} linked ${
-          books.length === 1 ? "book" : "books"
+          books.length === 1
+            ? "book"
+            : "books"
         }`}
       />
 
+      <View style={styles.filters}>
+        {CHAIN_FILTERS.map(
+          (item) => (
+            <Pressable
+              key={item.id}
+              onPress={() =>
+                setFilter(item.id)
+              }
+              style={[
+                styles.filter,
+                filter === item.id &&
+                  styles.filterActive
+              ]}
+            >
+              <Text
+                style={[
+                  styles.filterText,
+                  filter ===
+                    item.id &&
+                    styles.filterTextActive
+                ]}
+              >
+                {item.label}
+              </Text>
+            </Pressable>
+          )
+        )}
+      </View>
+
       {!!error && (
-        <View style={styles.errorBar}>
-          <Text style={styles.errorText}>
-            {error}
-          </Text>
-        </View>
+        <Text style={styles.error}>
+          {error}
+        </Text>
       )}
 
-      <FlatList
-        data={books}
-        keyExtractor={(item) => item.id}
-        pagingEnabled
-        decelerationRate="fast"
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() =>
-              load({ refresh: true })
-            }
+      {loading ? (
+        <View style={styles.center}>
+          <ActivityIndicator
+            size="large"
           />
-        }
-        renderItem={({ item }) => (
-          <View
-            style={styles.bookPage}
-            onTouchStart={handleTouchStart}
-            onTouchEnd={(event) =>
-              handleTouchEnd(event, item)
-            }
-          >
-            <View style={styles.coverWrap}>
-              {gutenbergCoverUrl(item) ? (
+        </View>
+      ) : (
+        <FlatList
+          data={books}
+          keyExtractor={(item) =>
+            item.id
+          }
+          pagingEnabled
+          decelerationRate="fast"
+          showsVerticalScrollIndicator={
+            false
+          }
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() =>
+                load({
+                  refresh: true
+                })
+              }
+            />
+          }
+          ListEmptyComponent={
+            <View style={styles.center}>
+              <Text
+                style={styles.emptyTitle}
+              >
+                No Chain entries
+              </Text>
+
+              <Text
+                style={styles.emptyBody}
+              >
+                Nothing is available
+                for this filter yet.
+              </Text>
+            </View>
+          }
+          renderItem={({ item }) => (
+            <View
+              style={styles.bookPage}
+              onTouchStart={
+                handleTouchStart
+              }
+              onTouchEnd={(event) =>
+                handleTouchEnd(
+                  event,
+                  item
+                )
+              }
+            >
+              <View
+                style={styles.coverWrap}
+              >
                 <Image
                   source={{
-                    uri: gutenbergCoverUrl(item)
+                    uri:
+                      gutenbergCoverUrl(
+                        item
+                      )
                   }}
                   resizeMode="contain"
                   style={styles.cover}
                 />
-              ) : (
-                <View
-                  style={[
-                    styles.cover,
-                    styles.coverFallback
-                  ]}
-                >
-                  <Text style={styles.coverFallbackText}>
-                    Lit Chain
-                  </Text>
-                </View>
-              )}
-            </View>
+              </View>
 
-            <View style={styles.bookCard}>
-              <Text style={styles.bookTitle}>
-                {item.title}
-              </Text>
-
-              {!!item.author && (
-                <Text style={styles.author}>
-                  {item.author}
-                </Text>
-              )}
-
-              <Text style={styles.linkCount}>
-                {item.linkCount} direct{" "}
-                {item.linkCount === 1
-                  ? "link"
-                  : "links"}
-              </Text>
-
-              <Pressable
-                onPress={() => openBookChain(item)}
-                style={styles.primaryButton}
+              <View
+                style={styles.bookCard}
               >
-                <Text style={styles.primaryButtonText}>
-                  Explore this chain
+                <Text
+                  style={styles.bookTitle}
+                >
+                  {item.title}
                 </Text>
-              </Pressable>
 
-              <Text style={styles.swipeHint}>
-                Swipe left to enter · Swipe up/down
-                between books
-              </Text>
+                {!!item.author && (
+                  <Text
+                    style={styles.author}
+                  >
+                    {item.author}
+                  </Text>
+                )}
+
+                <Text
+                  style={
+                    styles.linkCount
+                  }
+                >
+                  {item.linkCount} direct{" "}
+                  {item.linkCount === 1
+                    ? "link"
+                    : "links"}
+                </Text>
+
+                <Pressable
+                  onPress={() =>
+                    openBookChain(item)
+                  }
+                  style={
+                    styles.primaryButton
+                  }
+                >
+                  <Text
+                    style={
+                      styles.primaryButtonText
+                    }
+                  >
+                    Explore this chain
+                  </Text>
+                </Pressable>
+
+                <Text
+                  style={styles.swipeHint}
+                >
+                  Swipe left to enter ·
+                  swipe vertically between
+                  books
+                </Text>
+              </View>
             </View>
-          </View>
-        )}
-      />
+          )}
+        />
+      )}
 
       <BottomNav active="chain" />
     </SafeAreaView>
@@ -227,39 +330,68 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: "#f6fafa"
+    backgroundColor:
+      BRAND.background
   },
-  center: {
+  filters: {
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    backgroundColor:
+      BRAND.surface
+  },
+  filter: {
     flex: 1,
-    padding: 28,
+    minHeight: 38,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: BRAND.line,
     alignItems: "center",
     justifyContent: "center"
   },
-  muted: {
-    marginTop: 10,
-    color: "#6c7e81",
-    textAlign: "center"
+  filterActive: {
+    backgroundColor:
+      BRAND.teal,
+    borderColor: BRAND.teal
   },
-  errorBar: {
-    backgroundColor: "#fff5f5",
-    padding: 10
+  filterText: {
+    color: BRAND.muted,
+    fontWeight: "800"
   },
-  errorText: {
-    color: "#8f3232",
+  filterTextActive: {
+    color: "#FFFFFF"
+  },
+  center: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 28
+  },
+  error: {
+    color: BRAND.danger,
+    textAlign: "center",
+    padding: 8
+  },
+  emptyTitle: {
+    color: BRAND.ink,
+    fontSize: 22,
+    fontWeight: "900"
+  },
+  emptyBody: {
+    color: BRAND.muted,
+    marginTop: 8,
     textAlign: "center"
   },
   bookPage: {
-    minHeight: Math.max(
-      SCREEN_HEIGHT - 220,
-      520
-    ),
+    minHeight: 650,
     paddingHorizontal: 18,
-    paddingVertical: 18,
+    paddingVertical: 16,
     justifyContent: "center"
   },
   coverWrap: {
     flex: 1,
-    minHeight: 300,
+    minHeight: 310,
     alignItems: "center",
     justifyContent: "center"
   },
@@ -268,57 +400,48 @@ const styles = StyleSheet.create({
     height: "100%",
     maxHeight: 430
   },
-  coverFallback: {
-    borderRadius: 18,
-    backgroundColor: "#eaf4f4",
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  coverFallbackText: {
-    color: "#3bb6b1",
-    fontWeight: "900",
-    fontSize: 28
-  },
   bookCard: {
-    backgroundColor: "#ffffff",
+    backgroundColor:
+      BRAND.surface,
     borderWidth: 1,
-    borderColor: "#dce7e7",
-    borderRadius: 22,
+    borderColor: BRAND.line,
+    borderRadius: 24,
     padding: 20,
-    marginTop: 16
+    marginTop: 14
   },
   bookTitle: {
-    color: "#162224",
+    color: BRAND.ink,
     fontSize: 24,
     fontWeight: "900"
   },
   author: {
-    color: "#607074",
-    marginTop: 5,
+    color: BRAND.muted,
+    marginTop: 6,
     fontSize: 15
   },
   linkCount: {
+    color: BRAND.tealDark,
     marginTop: 14,
-    color: "#287c79",
-    fontWeight: "800"
+    fontWeight: "900"
   },
   primaryButton: {
     marginTop: 18,
     minHeight: 52,
     borderRadius: 14,
-    backgroundColor: "#3bb6b1",
+    backgroundColor:
+      BRAND.teal,
     alignItems: "center",
     justifyContent: "center"
   },
   primaryButtonText: {
-    color: "#ffffff",
-    fontSize: 16,
-    fontWeight: "900"
+    color: "#FFFFFF",
+    fontWeight: "900",
+    fontSize: 16
   },
   swipeHint: {
-    marginTop: 12,
+    color: BRAND.muted,
     textAlign: "center",
-    color: "#8b9a9c",
-    fontSize: 11
+    fontSize: 11,
+    marginTop: 12
   }
 });

@@ -1,13 +1,13 @@
 import {
   FlatList,
   Image,
-  Linking,
   Pressable,
   SafeAreaView,
   StyleSheet,
   Text,
   View
 } from "react-native";
+import { router } from "expo-router";
 
 import AppHeader from "../components/AppHeader";
 import BottomNav from "../components/BottomNav";
@@ -16,11 +16,18 @@ import {
   FEATURED_PUBLIC_DOMAIN_BOOKS
 } from "../../shared/discoveryCatalog";
 
+import { BRAND } from "../../shared/brand";
+
 export default function DiscoverScreen() {
-  async function openBook(book) {
-    await Linking.openURL(
-      `https://litchain.org/read/reader/${book.id}`
-    );
+  function openBook(book) {
+    router.push({
+      pathname: "/reader/[bookId]",
+      params: {
+        bookId: book.id,
+        title: book.title,
+        author: book.author
+      }
+    });
   }
 
   return (
@@ -31,39 +38,59 @@ export default function DiscoverScreen() {
       />
 
       <FlatList
-        data={FEATURED_PUBLIC_DOMAIN_BOOKS}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.list}
+        data={
+          FEATURED_PUBLIC_DOMAIN_BOOKS
+        }
+        keyExtractor={(item) =>
+          item.id
+        }
+        contentContainerStyle={
+          styles.list
+        }
         ListHeaderComponent={
           <View style={styles.intro}>
-            <Text style={styles.introTitle}>
+            <Text
+              style={styles.introTitle}
+            >
               Featured reading
             </Text>
-            <Text style={styles.introBody}>
-              Native search and the native Reader are the next shared migration.
-              These featured books already open the live Lit Chain reader.
+
+            <Text
+              style={styles.introBody}
+            >
+              Books now open in the
+              native Lit Chain reader.
             </Text>
           </View>
         }
         renderItem={({ item }) => (
           <Pressable
-            onPress={() => openBook(item)}
+            onPress={() =>
+              openBook(item)
+            }
             style={styles.card}
           >
             <Image
-              source={{ uri: item.image }}
+              source={{
+                uri: item.image
+              }}
               resizeMode="contain"
               style={styles.cover}
             />
+
             <View style={styles.info}>
               <Text style={styles.title}>
                 {item.title}
               </Text>
-              <Text style={styles.author}>
+
+              <Text
+                style={styles.author}
+              >
                 {item.author}
               </Text>
+
               <Text style={styles.open}>
-                Read now →
+                Read natively →
               </Text>
             </View>
           </Pressable>
@@ -78,7 +105,8 @@ export default function DiscoverScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: "#f6fafa"
+    backgroundColor:
+      BRAND.background
   },
   list: {
     padding: 18
@@ -87,19 +115,19 @@ const styles = StyleSheet.create({
     marginBottom: 16
   },
   introTitle: {
-    color: "#162224",
-    fontSize: 22,
+    color: BRAND.ink,
+    fontSize: 23,
     fontWeight: "900"
   },
   introBody: {
-    color: "#6c7e81",
-    lineHeight: 20,
+    color: BRAND.muted,
     marginTop: 6
   },
   card: {
-    backgroundColor: "#ffffff",
+    backgroundColor:
+      BRAND.surface,
     borderWidth: 1,
-    borderColor: "#dce7e7",
+    borderColor: BRAND.line,
     borderRadius: 20,
     padding: 14,
     marginBottom: 14,
@@ -115,16 +143,16 @@ const styles = StyleSheet.create({
     marginLeft: 16
   },
   title: {
-    color: "#162224",
+    color: BRAND.ink,
     fontSize: 18,
     fontWeight: "900"
   },
   author: {
-    color: "#6c7e81",
+    color: BRAND.muted,
     marginTop: 5
   },
   open: {
-    color: "#287c79",
+    color: BRAND.tealDark,
     fontWeight: "900",
     marginTop: 18
   }
