@@ -1,4 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState
+} from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -8,23 +13,49 @@ import {
   Text,
   View
 } from "react-native";
-import { router, useLocalSearchParams } from "expo-router";
+import {
+  router,
+  useLocalSearchParams
+} from "expo-router";
 
 import AppHeader from "../../components/AppHeader";
+
 import {
-  getBookLevelOne,
-  getPublicChainFeed
+  chainDownCount,
+  chainEntryKey,
+  chainUpCount,
+  chainVoteScore,
+  getDirectBookEntries,
+  getMyChainVotes,
+  getPublicBranches,
+  getPublicChainFeed,
+  voteOnChainEntry
 } from "../../services/chain";
 
 export default function BookChainScreen() {
   const params = useLocalSearchParams();
-  const bookId = String(params.bookId || "");
-  const title = String(params.title || "Book");
-  const author = String(params.author || "");
 
-  const [entries, setEntries] = useState([]);
+  const bookId = String(
+    params.bookId || ""
+  );
+
+  const title = String(
+    params.title || "Book"
+  );
+
+  const author = String(
+    params.author || ""
+  );
+
+  const [allEntries, setAllEntries] = useState([]);
+  const [levels, setLevels] = useState([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [votes, setVotes] = useState({});
+  const [voteLoading, setVoteLoading] = useState("");
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [status, setStatus] = useState("");
+
+  const touchStart = useRef(null);
 
   useEffect(() => {
     let active = true;
@@ -32,10 +63,30 @@ export default function BookChainScreen() {
     (async () => {
       try {
         const feed = await getPublicChainFeed();
-        if (active) setEntries(feed);
-      } catch (e) {
-        console.error(e);
-        if (active) setError("This chain could not be loaded.");
+
+        if (!active) return;
+
+        setAllEntries(feed);
+
+        const firstLevel =
+          getDirectBookEntries(
+            feed,
+            bookId
+          );
+
+        setLevels([firstLevel]);
+
+        setVotes(
+          await getMyChainVotes(feed)
+        );
+      } catch (error) {
+        console.error(error);
+
+        if (active) {
+          setStatus(
+            "This chain could not be loaded."
+          );
+        }
       } finally {
         if (active) setLoading(false);
       }
@@ -44,57 +95,273 @@ export default function BookChainScreen() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [bookId]);
 
-  const levelOne = useMemo(
-    () => getBookLevelOne(entries, bookId),
-    [entries, bookId]
+  const depth = levels.length;
+
+  const currentLevel =
+    levels[depth - 1] || [];
+
+  const currentEntry =
+    currentLevel[currentIndex] || null;
+
+  const branchCount = useMemo(
+    () =>
+      currentEntry
+        ? getPublicBranches(
+            allEntries,
+            currentEntry
+          ).length
+        : 0,
+    [allEntries, currentEntry]
   );
+
+  function goDeeper(entry) {
+    const branches =
+      getPublicBranches(
+        allEntries,
+        entry
+      );
+
+    if (!branches.length) {
+      setStatus(
+        "No further public links from this note yet."
+      );
+      return;
+    }
+
+    setLevels((current) => [
+      ...current,
+      branches
+    ]);
+
+    setCurrentIndex(0);
+    setStatus("");
+  }
+
+  function goBackDepth() {
+    if (levels.length <= 1) {
+      router.back();
+      return;
+    }
+
+    setLevels((current) =>
+      current.slice(0, -1)
+    );
+
+    setCurrentIndex(0);
+    setStatus("");
+  }
+
+  function handleTouchStart(event) {
+    const point = event.nativeEvent;
+
+    touchStart.current = {
+      x: point.pageX,
+      y: point.pageY
+    };
+  }
+
+  function handleTouchEnd(event, entry) {
+    if (!touchStart.current) return;
+
+    const point = event.nativeEvent;
+
+    const dx =
+      point.pageX -
+      touchStart.current.x;
+
+    const dy =
+      point.pageY -
+      touchStart.current.y;
+
+    touchStart.current = null;
+
+    if (
+      Math.abs(dx) <
+      Math.abs(dy) * 1.3
+    ) {
+      return;
+    }
+
+    if (dx < -60) {
+      goDeeper(entry);
+    } else if (dx > 60) {
+      goBackDepth();
+    }
+  }
+
+  async function handleVote(entry, direction) {
+    const key = chainEntryKey(entry);
+
+    try {
+      setVoteLoading(key);
+      setStatus("");
+
+      const result =
+        await voteOnChainEntry(
+          entry,
+          direction
+        );
+
+      setVotes((current) => ({
+        ...current,
+        [key]: result.direction
+      }));
+
+      setAllEntries((current) =>
+        current.map((candidate) =>
+          chainEntryKey(candidate) === key
+            ? {
+                ...candidate,
+                chainUpCount:
+                  result.chainUpCount,
+                chainDownCount:
+                  result.chainDownCount,
+                chainScore:
+                  result.chainScore
+              }
+            : candidate
+        )
+      );
+
+      setLevels((currentLevels) =>
+        currentLevels.map((level) =>
+          level.map((candidate) =>
+            chainEntryKey(candidate) === key
+              ? {
+                  ...candidate,
+                  chainUpCount:
+                    result.chainUpCount,
+                  chainDownCount:
+                    result.chainDownCount,
+                  chainScore:
+                    result.chainScore
+                }
+              : candidate
+          )
+        )
+      );
+    } catch (error) {
+      setStatus(
+        error?.message ||
+        "The Chain vote could not be updated."
+      );
+    } finally {
+      setVoteLoading("");
+    }
+  }
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.center}>
+          <ActivityIndicator size="large" />
+          <Text style={styles.muted}>
+            Loading links…
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safe}>
-      <View style={styles.topRow}>
-        <Pressable onPress={() => router.back()} style={styles.back}>
-          <Text style={styles.backText}>‹ Back</Text>
+      <View style={styles.backRow}>
+        <Pressable onPress={goBackDepth}>
+          <Text style={styles.backText}>
+            ‹ {depth > 1
+              ? `Level ${depth - 1}`
+              : "Books"}
+          </Text>
         </Pressable>
+
+        <Text style={styles.depthText}>
+          LEVEL {depth}
+        </Text>
       </View>
 
       <AppHeader
         title={title}
-        subtitle={author ? `${author} · Level 1` : "Level 1"}
+        subtitle={
+          author
+            ? `${author} · Level ${depth}`
+            : `Level ${depth}`
+        }
       />
 
-      {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" />
-          <Text style={styles.muted}>Loading links…</Text>
+      {!!status && (
+        <View style={styles.statusBar}>
+          <Text style={styles.statusText}>
+            {status}
+          </Text>
         </View>
-      ) : error ? (
-        <View style={styles.center}>
-          <Text style={styles.error}>{error}</Text>
-        </View>
-      ) : (
-        <FlatList
-          data={levelOne}
-          keyExtractor={(item) => `${item.userId || "user"}_${item.id}`}
-          pagingEnabled
-          decelerationRate="fast"
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={
-            levelOne.length ? undefined : styles.emptyContainer
-          }
-          ListEmptyComponent={
-            <View style={styles.center}>
-              <Text style={styles.emptyTitle}>No direct links yet</Text>
-              <Text style={styles.muted}>
-                This book does not currently have public Level 1 links.
-              </Text>
-            </View>
-          }
-          renderItem={({ item, index }) => (
-            <View style={styles.notePage}>
+      )}
+
+      <FlatList
+        key={`level-${depth}`}
+        data={currentLevel}
+        keyExtractor={(item) =>
+          chainEntryKey(item)
+        }
+        pagingEnabled
+        decelerationRate="fast"
+        showsVerticalScrollIndicator={false}
+        onMomentumScrollEnd={(event) => {
+          const height =
+            event.nativeEvent.layoutMeasurement
+              .height || 1;
+
+          const nextIndex = Math.round(
+            event.nativeEvent.contentOffset.y /
+            height
+          );
+
+          setCurrentIndex(
+            Math.max(
+              0,
+              Math.min(
+                nextIndex,
+                currentLevel.length - 1
+              )
+            )
+          );
+        }}
+        ListEmptyComponent={
+          <View style={styles.center}>
+            <Text style={styles.emptyTitle}>
+              No links yet
+            </Text>
+            <Text style={styles.muted}>
+              This level has no public links.
+            </Text>
+          </View>
+        }
+        renderItem={({ item, index }) => {
+          const key = chainEntryKey(item);
+          const myVote = votes[key] || 0;
+          const branches =
+            getPublicBranches(
+              allEntries,
+              item
+            );
+
+          return (
+            <View
+              style={styles.notePage}
+              onTouchStart={handleTouchStart}
+              onTouchEnd={(event) =>
+                handleTouchEnd(
+                  event,
+                  item
+                )
+              }
+            >
               <View style={styles.levelBadge}>
-                <Text style={styles.levelBadgeText}>LEVEL 1 · {index + 1}</Text>
+                <Text style={styles.levelBadgeText}>
+                  LEVEL {depth} · {index + 1} /{" "}
+                  {currentLevel.length}
+                </Text>
               </View>
 
               <View style={styles.noteCard}>
@@ -105,7 +372,8 @@ export default function BookChainScreen() {
                 )}
 
                 <Text style={styles.note}>
-                  {item.note || "Linked note"}
+                  {item.note ||
+                    "Linked note"}
                 </Text>
 
                 <View style={styles.meta}>
@@ -118,37 +386,100 @@ export default function BookChainScreen() {
 
                   {!!item.paragraphNumber && (
                     <Text style={styles.metaText}>
-                      Paragraph {item.paragraphNumber}
+                      Paragraph{" "}
+                      {item.paragraphNumber}
                     </Text>
                   )}
                 </View>
 
                 <View style={styles.actions}>
-                  <View style={styles.votePill}>
-                    <Text style={styles.voteText}>
-                      ▲ {Number(item.upVotes || item.upvotes || 0)}
+                  <Pressable
+                    disabled={
+                      voteLoading === key
+                    }
+                    onPress={() =>
+                      handleVote(item, 1)
+                    }
+                    style={[
+                      styles.voteButton,
+                      myVote === 1 &&
+                        styles.voteSelected
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.voteText,
+                        myVote === 1 &&
+                          styles.voteSelectedText
+                      ]}
+                    >
+                      🔗 Link{" "}
+                      {chainUpCount(item)}
                     </Text>
-                  </View>
-                  <View style={styles.votePill}>
-                    <Text style={styles.voteText}>
-                      ▼ {Number(item.downVotes || item.downvotes || 0)}
+                  </Pressable>
+
+                  <Pressable
+                    disabled={
+                      voteLoading === key
+                    }
+                    onPress={() =>
+                      handleVote(item, -1)
+                    }
+                    style={[
+                      styles.voteButton,
+                      myVote === -1 &&
+                        styles.voteSelected
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.voteText,
+                        myVote === -1 &&
+                          styles.voteSelectedText
+                      ]}
+                    >
+                      ⛓ Unlink{" "}
+                      {chainDownCount(item)}
                     </Text>
-                  </View>
-                  <View style={styles.votePill}>
-                    <Text style={styles.voteText}>
-                      Score {Number(item.voteScore || 0)}
-                    </Text>
-                  </View>
+                  </Pressable>
                 </View>
 
-                <Text style={styles.hint}>
-                  Voting, replies, branching, sharing and save actions are the next native pass.
+                <Text style={styles.score}>
+                  Chain score:{" "}
+                  {chainVoteScore(item)}
+                </Text>
+
+                <Pressable
+                  disabled={!branches.length}
+                  onPress={() =>
+                    goDeeper(item)
+                  }
+                  style={[
+                    styles.branchButton,
+                    !branches.length &&
+                      styles.branchButtonDisabled
+                  ]}
+                >
+                  <Text style={styles.branchButtonText}>
+                    {branches.length
+                      ? `Explore ${branches.length} deeper ${
+                          branches.length === 1
+                            ? "link"
+                            : "links"
+                        } →`
+                      : "End of this branch"}
+                  </Text>
+                </Pressable>
+
+                <Text style={styles.swipeHint}>
+                  Swipe left deeper · Swipe right back ·
+                  Swipe up/down between links
                 </Text>
               </View>
             </View>
-          )}
-        />
-      )}
+          );
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -157,21 +488,6 @@ const styles = StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: "#f6fafa"
-  },
-  topRow: {
-    paddingHorizontal: 14,
-    paddingTop: 8,
-    backgroundColor: "#ffffff"
-  },
-  back: {
-    alignSelf: "flex-start",
-    paddingVertical: 7,
-    paddingHorizontal: 4
-  },
-  backText: {
-    color: "#287c79",
-    fontWeight: "800",
-    fontSize: 16
   },
   center: {
     flex: 1,
@@ -184,12 +500,32 @@ const styles = StyleSheet.create({
     color: "#6c7e81",
     textAlign: "center"
   },
-  error: {
-    color: "#963939",
-    fontWeight: "700"
+  backRow: {
+    minHeight: 46,
+    paddingHorizontal: 16,
+    backgroundColor: "#ffffff",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between"
   },
-  emptyContainer: {
-    flexGrow: 1
+  backText: {
+    color: "#287c79",
+    fontWeight: "900"
+  },
+  depthText: {
+    color: "#829194",
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 1
+  },
+  statusBar: {
+    backgroundColor: "#fff8df",
+    padding: 9
+  },
+  statusText: {
+    textAlign: "center",
+    color: "#6d5a16",
+    fontSize: 12
   },
   emptyTitle: {
     color: "#162224",
@@ -249,25 +585,53 @@ const styles = StyleSheet.create({
   actions: {
     marginTop: 18,
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8
+    gap: 10
   },
-  votePill: {
+  voteButton: {
+    flex: 1,
     borderWidth: 1,
-    borderColor: "#d8e5e5",
-    borderRadius: 999,
-    paddingVertical: 8,
-    paddingHorizontal: 12
+    borderColor: "#cddddd",
+    borderRadius: 14,
+    paddingVertical: 12,
+    alignItems: "center"
+  },
+  voteSelected: {
+    backgroundColor: "#3bb6b1",
+    borderColor: "#3bb6b1"
   },
   voteText: {
     color: "#365154",
-    fontWeight: "800",
+    fontWeight: "900"
+  },
+  voteSelectedText: {
+    color: "#ffffff"
+  },
+  score: {
+    textAlign: "center",
+    color: "#718285",
+    marginTop: 10,
     fontSize: 12
   },
-  hint: {
-    marginTop: 22,
-    color: "#8a999b",
-    fontSize: 11,
-    lineHeight: 16
+  branchButton: {
+    marginTop: 18,
+    minHeight: 48,
+    borderRadius: 14,
+    backgroundColor: "#FFC00E",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 14
+  },
+  branchButtonDisabled: {
+    opacity: 0.45
+  },
+  branchButtonText: {
+    color: "#162224",
+    fontWeight: "900"
+  },
+  swipeHint: {
+    marginTop: 14,
+    textAlign: "center",
+    color: "#8b9a9c",
+    fontSize: 11
   }
 });
