@@ -8,29 +8,31 @@ import {
 import { BRAND } from "../../shared/brand";
 
 export default function AppHeader({
-  title = "The Chain",
+  title = "Lit Chain",
   subtitle = ""
 }) {
   return (
     <View style={styles.header}>
-      <View style={styles.brandRow}>
+      <View style={styles.row}>
+        <View style={styles.copy}>
+          <Text style={styles.title}>
+            {title}
+          </Text>
+
+          {!!subtitle && (
+            <Text style={styles.subtitle}>
+              {subtitle}
+            </Text>
+          )}
+        </View>
+
         <Image
-          source={{ uri: BRAND.logoHorizontal }}
+          source={{
+            uri: BRAND.logoHorizontal
+          }}
           resizeMode="contain"
           style={styles.logo}
         />
-      </View>
-
-      <View style={styles.titleRow}>
-        <Text style={styles.title}>
-          {title}
-        </Text>
-
-        {!!subtitle && (
-          <Text style={styles.subtitle}>
-            {subtitle}
-          </Text>
-        )}
       </View>
     </View>
   );
@@ -38,33 +40,34 @@ export default function AppHeader({
 
 const styles = StyleSheet.create({
   header: {
+    minHeight: 86,
     backgroundColor: BRAND.surface,
     borderBottomWidth: 1,
     borderBottomColor: BRAND.line,
     paddingHorizontal: 18,
-    paddingTop: 8,
-    paddingBottom: 12
-  },
-  brandRow: {
-    minHeight: 52,
+    paddingVertical: 12,
     justifyContent: "center"
   },
-  logo: {
-    width: 220,
-    height: 48,
-    alignSelf: "flex-start"
+  row: {
+    flexDirection: "row",
+    alignItems: "center"
   },
-  titleRow: {
-    marginTop: 8
+  copy: {
+    flex: 1,
+    paddingRight: 12
   },
   title: {
     color: BRAND.ink,
-    fontWeight: "900",
-    fontSize: 28
+    fontSize: 27,
+    fontWeight: "900"
   },
   subtitle: {
-    marginTop: 4,
     color: BRAND.muted,
-    fontSize: 13
+    marginTop: 4,
+    fontSize: 12
+  },
+  logo: {
+    width: 132,
+    height: 50
   }
 });
