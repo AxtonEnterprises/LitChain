@@ -1,4 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState
+} from "react";
 import {
   ActivityIndicator,
   Dimensions,
@@ -17,6 +22,7 @@ import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "../lib/firebase";
 import AppHeader from "../components/AppHeader";
 import BottomNav from "../components/BottomNav";
+
 import {
   buildSourceBooks,
   getPublicChainFeed,
@@ -30,6 +36,7 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
+  const touchStart = useRef(null);
 
   useEffect(() => {
     return onAuthStateChanged(auth, (user) => {
@@ -60,13 +67,54 @@ export default function HomeScreen() {
     [entries]
   );
 
+  function openBookChain(item) {
+    router.push({
+      pathname: "/chain/[bookId]",
+      params: {
+        bookId: item.bookId,
+        title: item.title,
+        author: item.author
+      }
+    });
+  }
+
+  function handleTouchStart(event) {
+    const point = event.nativeEvent;
+    touchStart.current = {
+      x: point.pageX,
+      y: point.pageY
+    };
+  }
+
+  function handleTouchEnd(event, item) {
+    if (!touchStart.current) return;
+
+    const point = event.nativeEvent;
+    const dx = point.pageX - touchStart.current.x;
+    const dy = point.pageY - touchStart.current.y;
+
+    touchStart.current = null;
+
+    if (
+      dx < -65 &&
+      Math.abs(dx) > Math.abs(dy) * 1.3
+    ) {
+      openBookChain(item);
+    }
+  }
+
   if (loading) {
     return (
       <SafeAreaView style={styles.safe}>
-        <AppHeader title="The Chain" subtitle="Public literature chains" />
+        <AppHeader
+          title="The Chain"
+          subtitle="Public literature chains"
+        />
         <View style={styles.center}>
           <ActivityIndicator size="large" />
-          <Text style={styles.muted}>Loading The Chain…</Text>
+          <Text style={styles.muted}>
+            Loading The Chain…
+          </Text>
         </View>
         <BottomNav active="chain" />
       </SafeAreaView>
@@ -77,12 +125,16 @@ export default function HomeScreen() {
     <SafeAreaView style={styles.safe}>
       <AppHeader
         title="The Chain"
-        subtitle={`${books.length} linked ${books.length === 1 ? "book" : "books"}`}
+        subtitle={`${books.length} linked ${
+          books.length === 1 ? "book" : "books"
+        }`}
       />
 
       {!!error && (
         <View style={styles.errorBar}>
-          <Text style={styles.errorText}>{error}</Text>
+          <Text style={styles.errorText}>
+            {error}
+          </Text>
         </View>
       )}
 
@@ -95,63 +147,73 @@ export default function HomeScreen() {
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={() => load({ refresh: true })}
+            onRefresh={() =>
+              load({ refresh: true })
+            }
           />
         }
-        ListEmptyComponent={
-          <View style={styles.center}>
-            <Text style={styles.emptyTitle}>No public chains yet</Text>
-            <Text style={styles.muted}>
-              Public notes linked directly to literature will appear here.
-            </Text>
-          </View>
-        }
         renderItem={({ item }) => (
-          <View style={styles.bookPage}>
+          <View
+            style={styles.bookPage}
+            onTouchStart={handleTouchStart}
+            onTouchEnd={(event) =>
+              handleTouchEnd(event, item)
+            }
+          >
             <View style={styles.coverWrap}>
               {gutenbergCoverUrl(item) ? (
                 <Image
-                  source={{ uri: gutenbergCoverUrl(item) }}
+                  source={{
+                    uri: gutenbergCoverUrl(item)
+                  }}
                   resizeMode="contain"
                   style={styles.cover}
                 />
               ) : (
-                <View style={[styles.cover, styles.coverFallback]}>
-                  <Text style={styles.coverFallbackText}>Lit Chain</Text>
+                <View
+                  style={[
+                    styles.cover,
+                    styles.coverFallback
+                  ]}
+                >
+                  <Text style={styles.coverFallbackText}>
+                    Lit Chain
+                  </Text>
                 </View>
               )}
             </View>
 
             <View style={styles.bookCard}>
-              <Text style={styles.bookTitle}>{item.title}</Text>
+              <Text style={styles.bookTitle}>
+                {item.title}
+              </Text>
+
               {!!item.author && (
-                <Text style={styles.author}>{item.author}</Text>
+                <Text style={styles.author}>
+                  {item.author}
+                </Text>
               )}
 
               <Text style={styles.linkCount}>
-                {item.linkCount} direct {item.linkCount === 1 ? "link" : "links"}
+                {item.linkCount} direct{" "}
+                {item.linkCount === 1
+                  ? "link"
+                  : "links"}
               </Text>
 
               <Pressable
-                onPress={() =>
-                  router.push({
-                    pathname: "/chain/[bookId]",
-                    params: {
-                      bookId: item.bookId,
-                      title: item.title,
-                      author: item.author
-                    }
-                  })
-                }
-                style={({ pressed }) => [
-                  styles.primaryButton,
-                  pressed && { opacity: 0.82 }
-                ]}
+                onPress={() => openBookChain(item)}
+                style={styles.primaryButton}
               >
                 <Text style={styles.primaryButtonText}>
                   Explore this chain
                 </Text>
               </Pressable>
+
+              <Text style={styles.swipeHint}>
+                Swipe left to enter · Swipe up/down
+                between books
+              </Text>
             </View>
           </View>
         )}
@@ -180,8 +242,6 @@ const styles = StyleSheet.create({
   },
   errorBar: {
     backgroundColor: "#fff5f5",
-    borderBottomWidth: 1,
-    borderBottomColor: "#efd7d7",
     padding: 10
   },
   errorText: {
@@ -189,7 +249,10 @@ const styles = StyleSheet.create({
     textAlign: "center"
   },
   bookPage: {
-    minHeight: Math.max(SCREEN_HEIGHT - 220, 520),
+    minHeight: Math.max(
+      SCREEN_HEIGHT - 220,
+      520
+    ),
     paddingHorizontal: 18,
     paddingVertical: 18,
     justifyContent: "center"
@@ -252,9 +315,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "900"
   },
-  emptyTitle: {
-    color: "#162224",
-    fontSize: 22,
-    fontWeight: "900"
+  swipeHint: {
+    marginTop: 12,
+    textAlign: "center",
+    color: "#8b9a9c",
+    fontSize: 11
   }
 });
