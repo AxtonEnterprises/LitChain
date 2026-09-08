@@ -17,22 +17,32 @@ import {
 } from "expo-router";
 
 import {
-  getNativeGroupForum
-} from "../../services/social";
+  collection,
+  getDocs
+} from "firebase/firestore";
 
+import { db } from "../../lib/firebase";
 import { BRAND } from "../../../shared/brand";
 
-export default function NativeGroupScreen() {
+export default function GroupPostScreen() {
   const params =
     useLocalSearchParams();
 
   const groupId =
     String(params.groupId || "");
 
-  const name =
-    String(params.name || "Group");
+  const postId =
+    String(params.postId || "");
 
-  const [posts, setPosts] =
+  const title =
+    String(
+      params.title || "Discussion"
+    );
+
+  const body =
+    String(params.body || "");
+
+  const [replies, setReplies] =
     useState([]);
 
   const [loading, setLoading] =
@@ -41,35 +51,76 @@ export default function NativeGroupScreen() {
   useEffect(() => {
     (async () => {
       try {
-        setPosts(
-          await getNativeGroupForum(
-            groupId
-          )
-        );
+        const candidates = [
+          [
+            "groups",
+            groupId,
+            "forumPosts",
+            postId,
+            "replies"
+          ],
+          [
+            "groups",
+            groupId,
+            "forumPosts",
+            postId,
+            "comments"
+          ]
+        ];
+
+        for (const path of candidates) {
+          try {
+            const snapshot =
+              await getDocs(
+                collection(
+                  db,
+                  ...path
+                )
+              );
+
+            if (!snapshot.empty) {
+              setReplies(
+                snapshot.docs.map(
+                  (item) => ({
+                    id: item.id,
+                    ...item.data()
+                  })
+                )
+              );
+              break;
+            }
+          } catch {
+            // Try the next known reply collection shape.
+          }
+        }
       } finally {
         setLoading(false);
       }
     })();
-  }, [groupId]);
+  }, [groupId, postId]);
 
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.header}>
         <Pressable
           onPress={() =>
-            router.replace(
-              "/groups"
-            )
+            router.back()
           }
         >
           <Text style={styles.back}>
-            ‹ Groups
+            ‹ Back
           </Text>
         </Pressable>
 
         <Text style={styles.title}>
-          {name}
+          {title}
         </Text>
+
+        {!!body && (
+          <Text style={styles.body}>
+            {body}
+          </Text>
+        )}
       </View>
 
       {loading ? (
@@ -80,7 +131,7 @@ export default function NativeGroupScreen() {
         </View>
       ) : (
         <FlatList
-          data={posts}
+          data={replies}
           keyExtractor={(item) =>
             item.id
           }
@@ -91,55 +142,23 @@ export default function NativeGroupScreen() {
             <Text
               style={styles.section}
             >
-              Discussions
+              Replies
             </Text>
           }
           ListEmptyComponent={
             <Text style={styles.muted}>
-              No discussions yet.
+              No replies yet.
             </Text>
           }
           renderItem={({ item }) => (
-            <Pressable
-              onPress={() =>
-                router.push({
-                  pathname:
-                    "/group/post",
-                  params: {
-                    groupId,
-                    postId:
-                      item.id,
-                    title:
-                      item.title ||
-                      "Discussion",
-                    body:
-                      item.body ||
-                      ""
-                  }
-                })
-              }
-              style={styles.card}
-            >
-              <Text
-                style={styles.postTitle}
-              >
-                {item.title ||
-                  "Discussion"}
+            <View style={styles.reply}>
+              <Text style={styles.replyText}>
+                {item.body ||
+                  item.text ||
+                  item.reply ||
+                  "Reply"}
               </Text>
-
-              {!!item.body && (
-                <Text
-                  numberOfLines={5}
-                  style={styles.body}
-                >
-                  {item.body}
-                </Text>
-              )}
-
-              <Text style={styles.open}>
-                Open discussion →
-              </Text>
-            </Pressable>
+            </View>
           )}
         />
       )}
@@ -150,16 +169,13 @@ export default function NativeGroupScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor:
-      BRAND.background
+    backgroundColor: BRAND.background
   },
   header: {
-    backgroundColor:
-      BRAND.surface,
+    backgroundColor: BRAND.surface,
     padding: 18,
     borderBottomWidth: 1,
-    borderBottomColor:
-      BRAND.line
+    borderBottomColor: BRAND.line
   },
   back: {
     color: BRAND.tealDark,
@@ -167,8 +183,13 @@ const styles = StyleSheet.create({
   },
   title: {
     color: BRAND.ink,
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: "900",
+    marginTop: 12
+  },
+  body: {
+    color: BRAND.muted,
+    lineHeight: 21,
     marginTop: 10
   },
   center: {
@@ -181,35 +202,23 @@ const styles = StyleSheet.create({
   },
   section: {
     color: BRAND.ink,
-    fontSize: 21,
+    fontSize: 20,
     fontWeight: "900",
     marginBottom: 12
   },
   muted: {
     color: BRAND.muted
   },
-  card: {
-    backgroundColor:
-      BRAND.surface,
+  reply: {
+    backgroundColor: BRAND.surface,
     borderWidth: 1,
     borderColor: BRAND.line,
-    borderRadius: 18,
-    padding: 18,
-    marginBottom: 12
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 10
   },
-  postTitle: {
+  replyText: {
     color: BRAND.ink,
-    fontSize: 18,
-    fontWeight: "900"
-  },
-  body: {
-    color: BRAND.muted,
-    marginTop: 8,
     lineHeight: 20
-  },
-  open: {
-    color: BRAND.tealDark,
-    fontWeight: "900",
-    marginTop: 14
   }
 });
