@@ -10,8 +10,10 @@ import {
   AppState,
   FlatList,
   Modal,
+  Platform,
   Pressable,
   SafeAreaView,
+  StatusBar,
   ScrollView,
   StyleSheet,
   Text,
@@ -52,8 +54,7 @@ import {
 } from "../../services/readerLibrary";
 
 function makeToc(paragraphs) {
-  const headings = [];
-  const seen = new Set();
+  const candidates = new Map();
 
   const patterns = [
     /^(chapter|chap\.?)\s+([ivxlcdm\d]+)\b/i,
@@ -71,11 +72,22 @@ function makeToc(paragraphs) {
     if (!patterns.some((pattern) => pattern.test(text))) return;
 
     const key = text.toLowerCase();
-    if (seen.has(key)) return;
-    seen.add(key);
 
-    headings.push({ title: text, paragraphIndex: index });
+    /*
+     * Gutenberg books often print the same chapter heading once
+     * in the book's own table of contents and again at the real
+     * chapter. Keeping the later occurrence makes native TOC
+     * navigation land on the chapter itself.
+     */
+    candidates.set(key, {
+      title: text,
+      paragraphIndex: index
+    });
   });
+
+  const headings = [...candidates.values()].sort(
+    (a, b) => a.paragraphIndex - b.paragraphIndex
+  );
 
   if (!headings.length) {
     for (let index = 0; index < paragraphs.length; index += 50) {
@@ -290,6 +302,14 @@ export default function Reader() {
 
     setShowNotes(true);
   }
+
+  function openNoteForParagraph(paragraphIndex) {
+    setSelectedParagraphIndex(paragraphIndex);
+    setShowNotes(true);
+    setShowAddNote(true);
+    void loadNotes();
+  }
+
 
   async function toggleSaved() {
     if (savingBook) return;
@@ -671,33 +691,42 @@ export default function Reader() {
                   return (
                     <Pressable
                       key={`${paragraph.index}:${fragmentIndex}`}
-                      onLongPress={() => {
-                        setSelectedParagraphIndex(paragraph.index);
-                        setShowNotes(true);
-                        setShowAddNote(true);
-                        void loadNotes();
-                      }}
+                      onLongPress={() =>
+                        openNoteForParagraph(paragraph.index)
+                      }
                       style={[
                         styles.row,
                         selected && styles.selectedRow
                       ]}
                     >
-                      <Text
-                        style={[
-                          styles.num,
-                          {
-                            color: hasNote
-                              ? BRAND.tealDark
-                              : palette.muted
+                      {paragraph.continuation ? (
+                        <View style={styles.numSpacer} />
+                      ) : (
+                        <Pressable
+                          onPress={() =>
+                            openNoteForParagraph(paragraph.index)
                           }
-                        ]}
-                      >
-                        {paragraph.continuation
-                          ? ""
-                          : hasNote
-                            ? `${paragraph.index + 1} •`
-                            : paragraph.index + 1}
-                      </Text>
+                          accessibilityRole="button"
+                          accessibilityLabel={`Add note to paragraph ${paragraph.index + 1}`}
+                          hitSlop={8}
+                          style={styles.numButton}
+                        >
+                          <Text
+                            style={[
+                              styles.numText,
+                              {
+                                color: hasNote
+                                  ? BRAND.tealDark
+                                  : palette.muted
+                              }
+                            ]}
+                          >
+                            {hasNote
+                              ? `${paragraph.index + 1} •`
+                              : paragraph.index + 1}
+                          </Text>
+                        </Pressable>
+                      )}
 
                       <Text
                         style={{
@@ -1106,10 +1135,18 @@ const styles = StyleSheet.create({
   selectedRow: {
     backgroundColor: "rgba(59,182,177,0.10)"
   },
-  num: {
+  numButton: {
     width: 34,
+    minHeight: 28,
+    paddingTop: 4,
+    justifyContent: "flex-start"
+  },
+  numSpacer: {
+    width: 34
+  },
+  numText: {
     fontSize: 10,
-    paddingTop: 4
+    fontWeight: "700"
   },
   controls: {
     minHeight: 62,
@@ -1131,7 +1168,11 @@ const styles = StyleSheet.create({
   },
   modalSafe: {
     flex: 1,
-    backgroundColor: "#F7FAFA"
+    backgroundColor: "#F7FAFA",
+    paddingTop:
+      Platform.OS === "android"
+        ? StatusBar.currentHeight || 0
+        : 0
   },
   modalHeader: {
     minHeight: 72,
