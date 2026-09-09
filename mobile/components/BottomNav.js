@@ -5,31 +5,28 @@ import {
   View
 } from "react-native";
 
-import {
-  MaterialCommunityIcons
-} from "@expo/vector-icons";
-
 import { router } from "expo-router";
-import { PRIMARY_NAV } from "../../shared/navigation";
-import { BRAND } from "../../shared/brand";
 
-const icons = {
-  discover: {
-    active: "compass",
-    inactive: "compass-outline"
-  },
-  chain: {
-    active: "link-variant",
-    inactive: "link-variant"
-  },
-  groups: {
-    active: "account-group",
-    inactive: "account-group-outline"
-  },
-  library: {
-    active: "bookshelf",
-    inactive: "bookshelf"
-  }
+import {
+  PRIMARY_NAV
+} from "../../shared/navigation";
+
+import {
+  BRAND
+} from "../../shared/brand";
+
+/*
+ * Startup-safe bottom navigation.
+ *
+ * Keep the navigation icon dependency out of the critical launch path until
+ * the Phase 9 crash is isolated. The rest of Phase 9 can continue to use
+ * @expo/vector-icons on screens that are opened later.
+ */
+const symbols = {
+  discover: "◇",
+  chain: "∞",
+  groups: "◎",
+  library: "▤"
 };
 
 export default function BottomNav({
@@ -37,55 +34,48 @@ export default function BottomNav({
 }) {
   return (
     <View style={styles.wrap}>
-      {PRIMARY_NAV.map((item) => {
-        const selected =
-          item.key === active;
+      {PRIMARY_NAV.map(
+        (item) => {
+          const selected =
+            item.key === active;
 
-        const icon =
-          icons[item.key] ||
-          {
-            active: "circle",
-            inactive: "circle-outline"
-          };
-
-        return (
-          <Pressable
-            key={item.key}
-            onPress={() => {
-              if (!selected) {
-                router.replace(
-                  item.mobilePath
-                );
-              }
-            }}
-            style={styles.item}
-          >
-            <MaterialCommunityIcons
-              name={
-                selected
-                  ? icon.active
-                  : icon.inactive
-              }
-              size={23}
-              color={
-                selected
-                  ? BRAND.teal
-                  : "#87999c"
-              }
-            />
-
-            <Text
-              style={[
-                styles.label,
-                selected &&
-                  styles.labelActive
-              ]}
+          return (
+            <Pressable
+              key={item.key}
+              onPress={() => {
+                if (!selected) {
+                  router.replace(
+                    item.mobilePath
+                  );
+                }
+              }}
+              style={styles.item}
             >
-              {item.label}
-            </Text>
-          </Pressable>
-        );
-      })}
+              <Text
+                style={[
+                  styles.icon,
+                  selected &&
+                    styles.iconActive
+                ]}
+              >
+                {symbols[
+                  item.key
+                ] || "○"}
+              </Text>
+
+              <Text
+                style={[
+                  styles.label,
+                  selected &&
+                    styles.labelActive
+                ]}
+              >
+                {item.label}
+              </Text>
+            </Pressable>
+          );
+        }
+      )}
     </View>
   );
 }
@@ -97,16 +87,27 @@ const styles = StyleSheet.create({
     paddingTop: 7,
     paddingBottom: 8,
     borderTopWidth: 1,
-    borderTopColor: BRAND.line,
-    backgroundColor: BRAND.surface,
+    borderTopColor:
+      BRAND.line,
+    backgroundColor:
+      BRAND.surface,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-around"
+    justifyContent:
+      "space-around"
   },
   item: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center"
+  },
+  icon: {
+    fontSize: 21,
+    color: "#87999c"
+  },
+  iconActive: {
+    color:
+      BRAND.teal
   },
   label: {
     marginTop: 3,
@@ -114,7 +115,8 @@ const styles = StyleSheet.create({
     color: "#6c7e81"
   },
   labelActive: {
-    color: BRAND.ink,
+    color:
+      BRAND.ink,
     fontWeight: "900"
   }
 });
