@@ -145,6 +145,7 @@ export default function Reader() {
   const [noteText, setNoteText] = useState("");
   const [noteVisibility, setNoteVisibility] = useState("private");
   const [noteGroupId, setNoteGroupId] = useState("");
+  const [discussGroupId, setDiscussGroupId] = useState("");
   const [groups, setGroups] = useState([]);
   const [selectedParagraphIndex, setSelectedParagraphIndex] = useState(null);
   const [savingNote, setSavingNote] = useState(false);
@@ -361,6 +362,31 @@ export default function Reader() {
     } finally {
       setSavingNote(false);
     }
+  }
+
+  function discussParagraph() {
+    if (selectedParagraphIndex === null || !discussGroupId) return;
+
+    const group = groups.find(
+      (item) => String(item.id) === String(discussGroupId)
+    );
+
+    setShowNotes(false);
+    setShowAddNote(false);
+
+    router.push({
+      pathname: "/group/new-discussion",
+      params: {
+        groupId: String(discussGroupId),
+        name: group?.name || group?.title || "Group",
+        role: group?.role || group?.membership?.role || "member",
+        sourceBookId: bookId,
+        sourceTitle: title,
+        sourceAuthor: author,
+        sourceParagraphIndex: String(selectedParagraphIndex),
+        paragraphPreview: paragraphs[selectedParagraphIndex] || ""
+      }
+    });
   }
 
   async function removeNote(entryId) {
@@ -989,6 +1015,56 @@ export default function Reader() {
               </View>
             )}
 
+            <View style={styles.discussCard}>
+              <Text style={styles.sectionLabel}>Discuss this paragraph</Text>
+              <Text style={styles.emptyText}>
+                Start a group discussion with the book and paragraph attached.
+              </Text>
+
+              {groups.length ? (
+                <>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    {groups.map((group) => (
+                      <Pressable
+                        key={`discuss-${group.id}`}
+                        onPress={() => setDiscussGroupId(String(group.id))}
+                        style={[
+                          styles.paragraphChip,
+                          discussGroupId === String(group.id) &&
+                            styles.paragraphChipActive
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.paragraphChipText,
+                            discussGroupId === String(group.id) &&
+                              styles.paragraphChipTextActive
+                          ]}
+                        >
+                          {group.name || group.title || "Group"}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+
+                  <Pressable
+                    disabled={!discussGroupId}
+                    onPress={discussParagraph}
+                    style={[
+                      styles.primaryButton,
+                      !discussGroupId && { opacity: 0.45 }
+                    ]}
+                  >
+                    <Text style={styles.primaryButtonText}>
+                      Start referenced discussion
+                    </Text>
+                  </Pressable>
+                </>
+              ) : (
+                <Text style={styles.emptyText}>Join a group first.</Text>
+              )}
+            </View>
+
             {notesLoading ? (
               <ActivityIndicator style={{ marginTop: 24 }} />
             ) : currentNotes.length ? (
@@ -1291,6 +1367,13 @@ const styles = StyleSheet.create({
   secondaryButtonText: {
     color: BRAND.ink,
     fontWeight: "800"
+  },
+  discussCard: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: BRAND.line,
+    gap: 10
   },
   noteEditor: {
     backgroundColor: "#FFFFFF",
