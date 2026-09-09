@@ -3,17 +3,21 @@ import {
   useMemo,
   useState
 } from "react";
+
 import {
   ActivityIndicator,
   FlatList,
   Image,
+  Modal,
   Pressable,
   SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View
 } from "react-native";
+
 import { router } from "expo-router";
 
 import AppHeader from "../components/AppHeader";
@@ -22,6 +26,18 @@ import BottomNav from "../components/BottomNav";
 import {
   getNativeLibraryBundle
 } from "../services/library";
+
+import {
+  cancelNativeFriendRequest,
+  findNativeReaderByUsername,
+  removeNativeFriend,
+  respondNativeFriendRequest,
+  sendNativeFriendRequest
+} from "../services/librarySocial";
+
+import {
+  getNativeProfileBadges
+} from "../services/profileBadges";
 
 import {
   LIBRARY_TABS
@@ -40,17 +56,23 @@ import { BRAND } from "../../shared/brand";
 export default function LibraryScreen() {
   const [tab, setTab] =
     useState("timeline");
-
   const [bundle, setBundle] =
     useState(null);
-
   const [loading, setLoading] =
     useState(true);
+
+  const [friendModal, setFriendModal] =
+    useState(false);
+  const [friendQuery, setFriendQuery] =
+    useState("");
+  const [friendResult, setFriendResult] =
+    useState(null);
+  const [friendStatus, setFriendStatus] =
+    useState("");
 
   async function load() {
     try {
       setLoading(true);
-
       setBundle(
         await getNativeLibraryBundle()
       );
@@ -98,7 +120,22 @@ export default function LibraryScreen() {
     ];
   }, [bundle, tab]);
 
+  const badges =
+    getNativeProfileBadges(bundle);
+
   function openItem(item) {
+    if (tab === "journal") {
+      router.push({
+        pathname:
+          "/journal/[entryId]",
+        params: {
+          entryId: item.id
+        }
+      });
+
+      return;
+    }
+
     if (tab === "groups") {
       router.push({
         pathname:
@@ -142,6 +179,68 @@ export default function LibraryScreen() {
     }
   }
 
+  async function searchFriend() {
+    try {
+      setFriendStatus("");
+      const result =
+        await findNativeReaderByUsername(
+          friendQuery
+        );
+
+      setFriendResult(result);
+
+      if (!result) {
+        setFriendStatus(
+          "No reader found."
+        );
+      }
+    } catch (error) {
+      setFriendStatus(
+        error?.message ||
+          "Could not search."
+      );
+    }
+  }
+
+  async function addFriend() {
+    if (!friendResult?.id) return;
+
+    try {
+      await sendNativeFriendRequest(
+        friendResult.id
+      );
+
+      setFriendStatus(
+        "Friend request sent."
+      );
+      await load();
+    } catch (error) {
+      setFriendStatus(
+        error?.message ||
+          "Could not send request."
+      );
+    }
+  }
+
+  async function respond(
+    request,
+    accept
+  ) {
+    try {
+      await respondNativeFriendRequest(
+        request.otherUserId,
+        accept
+      );
+
+      await load();
+    } catch (error) {
+      setFriendStatus(
+        error?.message ||
+          "Could not update request."
+      );
+    }
+  }
+
   const profileImage =
     profileAvatarUrl(
       bundle?.profile?.avatar
@@ -153,9 +252,7 @@ export default function LibraryScreen() {
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.center}>
-          <ActivityIndicator
-            size="large"
-          />
+          <ActivityIndicator size="large" />
         </View>
       </SafeAreaView>
     );
@@ -166,149 +263,363 @@ export default function LibraryScreen() {
       <AppHeader
         title="Library"
         subtitle={
-          bundle?.profile
-            ?.displayName ||
-          bundle?.profile
-            ?.username ||
+          bundle?.profile?.displayName ||
+          bundle?.profile?.username ||
           "Your Lit Chain"
         }
       />
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={
-          false
-        }
-        style={styles.tabScroll}
-        contentContainerStyle={
-          styles.tabs
-        }
-      >
-        {LIBRARY_TABS.map(
-          (item) => (
-            <Pressable
-              key={item.id}
-              onPress={() =>
-                setTab(item.id)
-              }
+      <View style={styles.tabs}>
+        {LIBRARY_TABS.map((item) => (
+          <Pressable
+            key={item.id}
+            onPress={() =>
+              setTab(item.id)
+            }
+            style={[
+              styles.tab,
+              tab === item.id &&
+                styles.tabActive
+            ]}
+          >
+            <Text
+              numberOfLines={1}
               style={[
-                styles.tab,
+                styles.tabText,
                 tab === item.id &&
-                  styles.tabActive
+                  styles.tabTextActive
               ]}
             >
-              <Text
-                style={[
-                  styles.tabText,
-                  tab === item.id &&
-                    styles.tabTextActive
-                ]}
-              >
-                {item.label}
-              </Text>
-            </Pressable>
-          )
-        )}
-      </ScrollView>
+              {item.label}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
 
       <FlatList
         data={items}
         key={tab}
-        keyExtractor={(
-          item,
-          index
-        ) =>
-          `${tab}_${
-            item.id || index
-          }`
+        keyExtractor={(item, index) =>
+          `${tab}_${item.id || index}`
         }
-        contentContainerStyle={
-          styles.list
-        }
+        contentContainerStyle={styles.list}
         ListHeaderComponent={
-          tab === "timeline" &&
-          bundle?.profile ? (
-            <Pressable
-              onPress={() =>
-                router.push(
-                  "/profile/edit"
-                )
-              }
-              style={
-                styles.profileCard
-              }
-            >
-              {profileImage ? (
-                <Image
-                  source={{
-                    uri: profileImage
-                  }}
-                  style={styles.avatar}
-                />
-              ) : (
-                <View
-                  style={
-                    styles.avatarFallback
-                  }
-                >
-                  <Text
+          <>
+            {tab === "timeline" &&
+              bundle?.profile && (
+                <>
+                  <Pressable
+                    onPress={() =>
+                      router.push(
+                        "/profile/edit"
+                      )
+                    }
                     style={
-                      styles.avatarInitial
+                      styles.profileCard
                     }
                   >
-                    {String(
-                      bundle.profile
-                        .displayName ||
-                        bundle.profile
-                          .username ||
-                        "L"
-                    )
-                      .charAt(0)
-                      .toUpperCase()}
-                  </Text>
-                </View>
+                    {profileImage ? (
+                      <Image
+                        source={{
+                          uri:
+                            profileImage
+                        }}
+                        style={
+                          styles.avatar
+                        }
+                      />
+                    ) : (
+                      <View
+                        style={
+                          styles.avatarFallback
+                        }
+                      >
+                        <Text
+                          style={
+                            styles.avatarInitial
+                          }
+                        >
+                          {String(
+                            bundle.profile
+                              .displayName ||
+                              bundle.profile
+                                .username ||
+                              "L"
+                          )
+                            .charAt(0)
+                            .toUpperCase()}
+                        </Text>
+                      </View>
+                    )}
+
+                    <View
+                      style={
+                        styles.profileCopy
+                      }
+                    >
+                      <Text
+                        style={
+                          styles.profileName
+                        }
+                      >
+                        {bundle.profile
+                          .displayName ||
+                          bundle.profile
+                            .username ||
+                          "Lit Chain Reader"}
+                      </Text>
+
+                      {!!bundle.profile
+                        .about && (
+                        <Text
+                          numberOfLines={2}
+                          style={
+                            styles.profileAbout
+                          }
+                        >
+                          {
+                            bundle.profile
+                              .about
+                          }
+                        </Text>
+                      )}
+
+                      <Text
+                        style={
+                          styles.editHint
+                        }
+                      >
+                        Tap to edit profile
+                      </Text>
+                    </View>
+                  </Pressable>
+
+                  {!!badges.length && (
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={
+                        false
+                      }
+                      contentContainerStyle={
+                        styles.badges
+                      }
+                    >
+                      {badges.map(
+                        (badge) => (
+                          <View
+                            key={badge.id}
+                            style={
+                              styles.badge
+                            }
+                          >
+                            <Text
+                              style={
+                                styles.badgeTitle
+                              }
+                            >
+                              {badge.label}
+                            </Text>
+
+                            <Text
+                              style={
+                                styles.badgeDetail
+                              }
+                            >
+                              {badge.detail}
+                            </Text>
+                          </View>
+                        )
+                      )}
+                    </ScrollView>
+                  )}
+                </>
               )}
 
+            {tab === "friends" && (
               <View
                 style={
-                  styles.profileCopy
+                  styles.sectionActions
                 }
               >
-                <Text
+                <Pressable
+                  onPress={() =>
+                    setFriendModal(true)
+                  }
                   style={
-                    styles.profileName
+                    styles.primaryAction
                   }
                 >
-                  {bundle.profile
-                    .displayName ||
-                    bundle.profile
-                      .username ||
-                    "Lit Chain Reader"}
-                </Text>
-
-                {!!bundle.profile
-                  .about && (
                   <Text
-                    numberOfLines={2}
                     style={
-                      styles.profileAbout
+                      styles.primaryActionText
                     }
                   >
-                    {
-                      bundle.profile
-                        .about
-                    }
+                    + Find Reader
                   </Text>
-                )}
+                </Pressable>
 
-                <Text
-                  style={styles.editHint}
-                >
-                  Tap to edit profile
-                </Text>
+                {bundle?.friendBundle
+                  ?.incoming?.map(
+                    (request) => (
+                      <View
+                        key={
+                          request.id
+                        }
+                        style={
+                          styles.requestCard
+                        }
+                      >
+                        <Text
+                          style={
+                            styles.requestName
+                          }
+                        >
+                          {request
+                            .profile
+                            ?.displayName ||
+                            request
+                              .profile
+                              ?.username ||
+                            "Reader"}
+                        </Text>
+
+                        <View
+                          style={
+                            styles.requestActions
+                          }
+                        >
+                          <Pressable
+                            onPress={() =>
+                              respond(
+                                request,
+                                true
+                              )
+                            }
+                          >
+                            <Text
+                              style={
+                                styles.accept
+                              }
+                            >
+                              Accept
+                            </Text>
+                          </Pressable>
+
+                          <Pressable
+                            onPress={() =>
+                              respond(
+                                request,
+                                false
+                              )
+                            }
+                          >
+                            <Text
+                              style={
+                                styles.decline
+                              }
+                            >
+                              Decline
+                            </Text>
+                          </Pressable>
+                        </View>
+                      </View>
+                    )
+                  )}
+
+                {bundle?.friendBundle
+                  ?.outgoing?.map(
+                    (request) => (
+                      <View
+                        key={
+                          request.id
+                        }
+                        style={
+                          styles.requestCard
+                        }
+                      >
+                        <Text
+                          style={
+                            styles.requestName
+                          }
+                        >
+                          Request sent to{" "}
+                          {request
+                            .profile
+                            ?.displayName ||
+                            request
+                              .profile
+                              ?.username ||
+                            "Reader"}
+                        </Text>
+
+                        <Pressable
+                          onPress={async () => {
+                            await cancelNativeFriendRequest(
+                              request.otherUserId
+                            );
+                            await load();
+                          }}
+                        >
+                          <Text
+                            style={
+                              styles.decline
+                            }
+                          >
+                            Cancel
+                          </Text>
+                        </Pressable>
+                      </View>
+                    )
+                  )}
               </View>
-            </Pressable>
-          ) : null
+            )}
+
+            {tab === "groups" && (
+              <View
+                style={
+                  styles.groupActions
+                }
+              >
+                <Pressable
+                  onPress={() =>
+                    router.push(
+                      "/groups"
+                    )
+                  }
+                  style={
+                    styles.secondaryAction
+                  }
+                >
+                  <Text
+                    style={
+                      styles.secondaryActionText
+                    }
+                  >
+                    Discover Groups
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={() =>
+                    router.push(
+                      "/group/create"
+                    )
+                  }
+                  style={
+                    styles.primaryAction
+                  }
+                >
+                  <Text
+                    style={
+                      styles.primaryActionText
+                    }
+                  >
+                    + Create Group
+                  </Text>
+                </Pressable>
+              </View>
+            )}
+          </>
         }
         ListEmptyComponent={
           <View style={styles.center}>
@@ -365,9 +676,7 @@ export default function LibraryScreen() {
                 />
               )}
 
-              <Text
-                style={styles.eyebrow}
-              >
+              <Text style={styles.eyebrow}>
                 {tab.toUpperCase()}
               </Text>
 
@@ -402,20 +711,59 @@ export default function LibraryScreen() {
                 </Text>
               )}
 
-              {tab === "friends" && (
+              {tab === "journal" && (
                 <Text
+                  numberOfLines={3}
                   style={styles.detail}
                 >
-                  Friend
+                  ¶
+                  {Number(
+                    item.paragraphIndex ||
+                    0
+                  ) + 1}
+                  {" · "}
+                  {item.note ||
+                    "Tap to open note"}
                 </Text>
+              )}
+
+              {tab === "friends" && (
+                <View
+                  style={
+                    styles.friendRow
+                  }
+                >
+                  <Text
+                    style={styles.detail}
+                  >
+                    Friend
+                  </Text>
+
+                  <Pressable
+                    onPress={async () => {
+                      await removeNativeFriend(
+                        item.otherUserId ||
+                        item.id
+                      );
+                      await load();
+                    }}
+                  >
+                    <Text
+                      style={
+                        styles.removeFriend
+                      }
+                    >
+                      Remove
+                    </Text>
+                  </Pressable>
+                </View>
               )}
 
               {tab === "groups" && (
                 <Text
                   style={styles.detail}
                 >
-                  {item.membership
-                    ?.role ||
+                  {item.membership?.role ||
                     (
                       item.type ===
                       "class"
@@ -431,6 +779,99 @@ export default function LibraryScreen() {
       />
 
       <BottomNav active="library" />
+
+      <Modal
+        visible={friendModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() =>
+          setFriendModal(false)
+        }
+      >
+        <Pressable
+          style={styles.overlay}
+          onPress={() =>
+            setFriendModal(false)
+          }
+        >
+          <Pressable
+            onPress={() => {}}
+            style={styles.friendPopup}
+          >
+            <Text
+              style={styles.popupTitle}
+            >
+              Find Reader
+            </Text>
+
+            <TextInput
+              value={friendQuery}
+              onChangeText={setFriendQuery}
+              placeholder="Exact username"
+              autoCapitalize="none"
+              style={styles.searchInput}
+              onSubmitEditing={
+                searchFriend
+              }
+            />
+
+            <Pressable
+              onPress={searchFriend}
+              style={
+                styles.primaryAction
+              }
+            >
+              <Text
+                style={
+                  styles.primaryActionText
+                }
+              >
+                Search
+              </Text>
+            </Pressable>
+
+            {!!friendResult && (
+              <View
+                style={
+                  styles.friendResult
+                }
+              >
+                <Text
+                  style={
+                    styles.requestName
+                  }
+                >
+                  {friendResult
+                    .displayName ||
+                    friendResult
+                      .username ||
+                    "Reader"}
+                </Text>
+
+                <Pressable
+                  onPress={addFriend}
+                >
+                  <Text
+                    style={styles.accept}
+                  >
+                    Add Friend
+                  </Text>
+                </Pressable>
+              </View>
+            )}
+
+            {!!friendStatus && (
+              <Text
+                style={
+                  styles.friendStatus
+                }
+              >
+                {friendStatus}
+              </Text>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -438,59 +879,56 @@ export default function LibraryScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor:
-      BRAND.background
+    backgroundColor: BRAND.background
   },
   center: {
-    flex: 1,
-    minHeight: 220,
+    minHeight: 180,
     alignItems: "center",
     justifyContent: "center",
     padding: 24
   },
-  tabScroll: {
-    maxHeight: 58,
-    backgroundColor:
-      BRAND.surface
-  },
   tabs: {
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    gap: 8
+    minHeight: 50,
+    flexDirection: "row",
+    paddingHorizontal: 6,
+    paddingVertical: 7,
+    gap: 4,
+    backgroundColor: BRAND.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: BRAND.line
   },
   tab: {
-    minWidth: 92,
-    minHeight: 38,
-    borderWidth: 1,
-    borderColor: BRAND.line,
+    flex: 1,
+    minWidth: 0,
+    minHeight: 35,
     borderRadius: 999,
     alignItems: "center",
     justifyContent: "center"
   },
   tabActive: {
-    backgroundColor:
-      BRAND.teal
+    backgroundColor: BRAND.teal
   },
   tabText: {
     color: BRAND.muted,
-    fontWeight: "800"
+    fontWeight: "800",
+    fontSize: 10
   },
   tabTextActive: {
-    color: "#FFFFFF"
+    color: "#FFF"
   },
   list: {
-    padding: 16
+    padding: 14,
+    paddingBottom: 80
   },
   profileCard: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor:
-      BRAND.surface,
+    backgroundColor: BRAND.surface,
     borderRadius: 20,
     borderWidth: 1,
     borderColor: BRAND.line,
     padding: 16,
-    marginBottom: 14
+    marginBottom: 10
   },
   avatar: {
     width: 68,
@@ -501,13 +939,12 @@ const styles = StyleSheet.create({
     width: 68,
     height: 68,
     borderRadius: 34,
-    backgroundColor:
-      BRAND.teal,
+    backgroundColor: BRAND.teal,
     alignItems: "center",
     justifyContent: "center"
   },
   avatarInitial: {
-    color: "#FFFFFF",
+    color: "#FFF",
     fontSize: 28,
     fontWeight: "900"
   },
@@ -530,9 +967,87 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     fontSize: 11
   },
+  badges: {
+    gap: 8,
+    paddingBottom: 12
+  },
+  badge: {
+    minWidth: 118,
+    backgroundColor: "#FFF8DF",
+    borderRadius: 14,
+    padding: 11
+  },
+  badgeTitle: {
+    color: BRAND.ink,
+    fontWeight: "900"
+  },
+  badgeDetail: {
+    color: BRAND.muted,
+    fontSize: 10,
+    marginTop: 3
+  },
+  sectionActions: {
+    marginBottom: 12
+  },
+  groupActions: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 12
+  },
+  primaryAction: {
+    flex: 1,
+    minHeight: 44,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: BRAND.teal,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  primaryActionText: {
+    color: "#FFF",
+    fontWeight: "900"
+  },
+  secondaryAction: {
+    flex: 1,
+    minHeight: 44,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: BRAND.teal,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  secondaryActionText: {
+    color: BRAND.tealDark,
+    fontWeight: "900"
+  },
+  requestCard: {
+    backgroundColor: BRAND.surface,
+    borderWidth: 1,
+    borderColor: BRAND.line,
+    borderRadius: 14,
+    padding: 12,
+    marginTop: 8
+  },
+  requestName: {
+    color: BRAND.ink,
+    fontWeight: "900"
+  },
+  requestActions: {
+    flexDirection: "row",
+    gap: 14,
+    marginTop: 8
+  },
+  accept: {
+    color: BRAND.tealDark,
+    fontWeight: "900"
+  },
+  decline: {
+    color: BRAND.danger,
+    fontWeight: "900"
+  },
   card: {
-    backgroundColor:
-      BRAND.surface,
+    backgroundColor: BRAND.surface,
     borderWidth: 1,
     borderColor: BRAND.line,
     borderRadius: 18,
@@ -571,7 +1086,59 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontWeight: "800"
   },
+  friendRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center"
+  },
+  removeFriend: {
+    color: BRAND.danger,
+    fontWeight: "900",
+    marginTop: 12
+  },
   empty: {
     color: BRAND.muted
+  },
+  overlay: {
+    flex: 1,
+    backgroundColor:
+      "rgba(0,0,0,0.35)",
+    paddingTop: 120,
+    paddingHorizontal: 20
+  },
+  friendPopup: {
+    backgroundColor: BRAND.surface,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: BRAND.line,
+    padding: 18
+  },
+  popupTitle: {
+    color: BRAND.ink,
+    fontSize: 20,
+    fontWeight: "900",
+    marginBottom: 12
+  },
+  searchInput: {
+    minHeight: 46,
+    borderWidth: 1,
+    borderColor: BRAND.line,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    marginBottom: 10
+  },
+  friendResult: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: BRAND.line,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center"
+  },
+  friendStatus: {
+    color: BRAND.muted,
+    textAlign: "center",
+    marginTop: 12
   }
 });
