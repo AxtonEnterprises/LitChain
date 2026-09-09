@@ -103,30 +103,60 @@ export default function HomeScreen() {
     });
   }
 
-  async function searchBooks() {
-    const term = queryText.trim();
-    if (!term) { setSearchResults([]); return; }
-    try {
-      setSearching(true);
-      const response = await fetch(`https://gutendex.com/books/?languages=en&search=${encodeURIComponent(term)}`);
-      const data = await response.json();
-      setSearchResults(Array.isArray(data.results) ? data.results.slice(0, 20) : []);
-    } finally {
-      setSearching(false);
+  function searchBooks() {
+    const term = queryText.trim().toLowerCase();
+
+    if (!term) {
+      setSearchResults([]);
+      return;
     }
+
+    setSearching(true);
+
+    const matches = books.filter((book) =>
+      [
+        book.title,
+        book.author
+      ]
+        .filter(Boolean)
+        .some((value) =>
+          String(value)
+            .toLowerCase()
+            .includes(term)
+        )
+    );
+
+    setSearchResults(matches);
+    setSearching(false);
   }
 
-  async function loadRandomBook() {
-    try {
-      setRandomLoading(true);
-      const page = 1 + Math.floor(Math.random() * 20);
-      const response = await fetch(`https://gutendex.com/books/?languages=en&page=${page}`);
-      const data = await response.json();
-      const results = Array.isArray(data.results) ? data.results : [];
-      setRandomBook(results.length ? results[Math.floor(Math.random() * results.length)] : null);
-    } finally {
-      setRandomLoading(false);
+  function loadRandomBook() {
+    if (!books.length) {
+      setRandomBook(null);
+      return;
     }
+
+    setRandomLoading(true);
+
+    const candidates =
+      books.length > 1 && randomBook
+        ? books.filter(
+            (book) =>
+              String(book.id) !==
+              String(randomBook.id)
+          )
+        : books;
+
+    setRandomBook(
+      candidates[
+        Math.floor(
+          Math.random() *
+          candidates.length
+        )
+      ] || null
+    );
+
+    setRandomLoading(false);
   }
 
   function handleTouchStart(event) {
@@ -182,7 +212,7 @@ export default function HomeScreen() {
 
       {!!error && <Text style={styles.error}>{error}</Text>}
 
-      {randomLoading && <View style={styles.randomBanner}><ActivityIndicator /><Text style={styles.randomBannerText}>Choosing a random book…</Text></View>}
+      {randomLoading && <View style={styles.randomBanner}><ActivityIndicator /><Text style={styles.randomBannerText}>Choosing a random Chain…</Text></View>}
       {!!randomBook && !randomLoading && (
         <View style={styles.randomBanner}>
           <Text numberOfLines={1} style={styles.randomBannerTitle}>{randomBook.title}</Text>
@@ -245,13 +275,13 @@ export default function HomeScreen() {
 
       <Modal visible={showSearch} animationType="slide" onRequestClose={() => setShowSearch(false)}>
         <SafeAreaView style={styles.modalSafe}>
-          <View style={styles.modalHeader}><Text style={styles.modalTitle}>Search Books</Text><Pressable onPress={() => setShowSearch(false)} style={styles.closeButton}><Text style={styles.closeText}>×</Text></Pressable></View>
+          <View style={styles.modalHeader}><Text style={styles.modalTitle}>Search Chains</Text><Pressable onPress={() => setShowSearch(false)} style={styles.closeButton}><Text style={styles.closeText}>×</Text></Pressable></View>
           <View style={styles.searchRow}>
-            <TextInput value={queryText} onChangeText={setQueryText} onSubmitEditing={searchBooks} placeholder="Search title or author" placeholderTextColor="#8B999B" style={styles.searchInput} />
+            <TextInput value={queryText} onChangeText={setQueryText} onSubmitEditing={searchBooks} placeholder="Search linked title or author" placeholderTextColor="#8B999B" style={styles.searchInput} />
             <Pressable onPress={searchBooks} style={styles.searchButton}><Text style={styles.searchButtonText}>Search</Text></Pressable>
           </View>
           {searching ? <View style={styles.center}><ActivityIndicator size="large" /></View> : (
-            <FlatList data={searchResults} keyExtractor={book => String(book.id)} contentContainerStyle={styles.searchList} ListEmptyComponent={<Text style={styles.searchEmpty}>Search by title or author.</Text>} renderItem={({ item }) => <SearchBookRow book={item} />} />
+            <FlatList data={searchResults} keyExtractor={book => String(book.id)} contentContainerStyle={styles.searchList} ListEmptyComponent={<Text style={styles.searchEmpty}>Search books that already have Chain entries.</Text>} renderItem={({ item }) => <SearchBookRow book={item} />} />
           )}
         </SafeAreaView>
       </Modal>
