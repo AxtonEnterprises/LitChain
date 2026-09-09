@@ -1,4 +1,11 @@
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  Image,
+  Pressable,
+  StyleSheet,
+  Text,
+  View
+} from "react-native";
+
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { BRAND } from "../../shared/brand";
@@ -10,7 +17,8 @@ export default function AppHeader({
   subtitle = "",
   showNotifications = true
 }) {
-  const [unread, setUnread] = useState(0);
+  const [unread, setUnread] =
+    useState(0);
 
   useEffect(() => {
     let active = true;
@@ -23,12 +31,23 @@ export default function AppHeader({
 
     (async () => {
       try {
-        const items = await getNativeNotifications(100);
+        const items =
+          await getNativeNotifications(
+            100
+          );
+
         if (active) {
-          setUnread(items.filter((item) => !item.read).length);
+          setUnread(
+            items.filter(
+              (item) =>
+                !item.read
+            ).length
+          );
         }
       } catch {
-        if (active) setUnread(0);
+        if (active) {
+          setUnread(0);
+        }
       }
     })();
 
@@ -40,11 +59,18 @@ export default function AppHeader({
   return (
     <View style={styles.header}>
       <View style={styles.copy}>
-        <Text numberOfLines={1} style={styles.title}>
+        <Text
+          numberOfLines={1}
+          style={styles.title}
+        >
           {title}
         </Text>
+
         {!!subtitle && (
-          <Text numberOfLines={1} style={styles.subtitle}>
+          <Text
+            numberOfLines={1}
+            style={styles.subtitle}
+          >
             {subtitle}
           </Text>
         )}
@@ -54,16 +80,29 @@ export default function AppHeader({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={
-            unread ? `${unread} unread notifications` : "Notifications"
+            unread
+              ? `${unread} unread notifications`
+              : "Notifications"
           }
-          onPress={() => router.push("/notifications")}
+          onPress={() =>
+            router.push(
+              "/notifications"
+            )
+          }
           style={styles.bell}
         >
-          <LitIcon name="bell" active={unread > 0} size={28} />
+          <LitIcon
+            name="bell"
+            active={false}
+            size={25}
+          />
+
           {unread > 0 && (
             <View style={styles.badge}>
               <Text style={styles.badgeText}>
-                {unread > 99 ? "99+" : unread}
+                {unread > 99
+                  ? "99+"
+                  : unread}
               </Text>
             </View>
           )}
@@ -71,7 +110,9 @@ export default function AppHeader({
       )}
 
       <Image
-        source={{ uri: BRAND.logoHorizontal }}
+        source={{
+          uri: BRAND.logoHorizontal
+        }}
         resizeMode="contain"
         style={styles.logo}
       />
@@ -79,57 +120,62 @@ export default function AppHeader({
   );
 }
 
-const styles = StyleSheet.create({
-  header: {
-    minHeight: 72,
-    backgroundColor: BRAND.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: BRAND.line,
-    paddingHorizontal: 16,
-    paddingVertical: 9,
-    flexDirection: "row",
-    alignItems: "center"
-  },
-  copy: {
-    flex: 1,
-    paddingRight: 8
-  },
-  title: {
-    color: BRAND.ink,
-    fontSize: 22,
-    fontWeight: "900"
-  },
-  subtitle: {
-    color: BRAND.muted,
-    fontSize: 11,
-    marginTop: 2
-  },
-  bell: {
-    width: 42,
-    height: 42,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 4
-  },
-  badge: {
-    position: "absolute",
-    right: -1,
-    top: -1,
-    minWidth: 18,
-    height: 18,
-    paddingHorizontal: 4,
-    borderRadius: 9,
-    backgroundColor: BRAND.yellow,
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  badgeText: {
-    color: BRAND.ink,
-    fontSize: 9,
-    fontWeight: "900"
-  },
-  logo: {
-    width: 116,
-    height: 42
-  }
-});
+const styles =
+  StyleSheet.create({
+    header: {
+      minHeight: 72,
+      backgroundColor:
+        BRAND.surface,
+      borderBottomWidth: 1,
+      borderBottomColor:
+        BRAND.line,
+      paddingHorizontal: 16,
+      paddingVertical: 9,
+      flexDirection: "row",
+      alignItems: "center"
+    },
+    copy: {
+      flex: 1,
+      paddingRight: 8
+    },
+    title: {
+      color: BRAND.ink,
+      fontSize: 22,
+      fontWeight: "900"
+    },
+    subtitle: {
+      color: BRAND.muted,
+      fontSize: 11,
+      marginTop: 2
+    },
+    bell: {
+      width: 42,
+      height: 42,
+      alignItems: "center",
+      justifyContent: "center",
+      marginRight: 4,
+      overflow: "visible"
+    },
+    badge: {
+      position: "absolute",
+      right: -1,
+      top: -1,
+      minWidth: 18,
+      height: 18,
+      paddingHorizontal: 4,
+      borderRadius: 9,
+      backgroundColor:
+        BRAND.yellow,
+      alignItems: "center",
+      justifyContent: "center"
+    },
+    badgeText: {
+      color: BRAND.ink,
+      fontSize: 9,
+      fontWeight: "900"
+    },
+    logo: {
+      width: 116,
+      height: 42
+    }
+  });
