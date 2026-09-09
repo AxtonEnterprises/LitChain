@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   Pressable,
   SafeAreaView,
+  ScrollView,
   Share,
   StyleSheet,
   Text,
@@ -188,7 +189,12 @@ export default function JournalEntryScreen() {
         </Text>
       </View>
 
-      <View style={styles.content}>
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={styles.contentInner}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
         <Text style={styles.bookTitle}>
           {entry?.title || "Book"}
         </Text>
@@ -328,7 +334,7 @@ export default function JournalEntryScreen() {
             {status}
           </Text>
         )}
-      </View>
+      </ScrollView>
 
       <BottomNav active="library" />
     </SafeAreaView>
@@ -365,8 +371,11 @@ const styles = StyleSheet.create({
     marginTop: 8
   },
   content: {
-    flex: 1,
-    padding: 18
+    flex: 1
+  },
+  contentInner: {
+    padding: 18,
+    paddingBottom: 110
   },
   bookTitle: {
     color: BRAND.ink,
