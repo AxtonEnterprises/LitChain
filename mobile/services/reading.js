@@ -13,6 +13,24 @@ import {
   mergeReadingProgress
 } from "../../shared/readingProgressCore";
 
+function progressPercent(index, totalParagraphs) {
+  const total = Math.max(Number(totalParagraphs) || 0, 0);
+  const safe = Math.max(
+    0,
+    Math.min(Number(index) || 0, Math.max(total - 1, 0))
+  );
+
+  if (total <= 1) return 0;
+
+  return Math.max(
+    0,
+    Math.min(
+      100,
+      Math.round((safe / (total - 1)) * 100)
+    )
+  );
+}
+
 export async function getNativeReadingProgress(bookId) {
   const user = auth.currentUser;
 
@@ -75,6 +93,116 @@ export async function getNativeReadingTimeline() {
   }
 }
 
+/*
+ * Saves WHERE the user is without awarding verified reading credit.
+ *
+ * This separation is critical: swiping/jumping to a page must never count as
+ * reading its first paragraph.
+ */
+export async function saveNativeReadingPosition({
+  bookId,
+  title,
+  author,
+  paragraphIndex,
+  totalParagraphs,
+  image = ""
+}) {
+  const user = auth.currentUser;
+
+  if (!user || !bookId) return null;
+
+  const ref = doc(
+    db,
+    "users",
+    user.uid,
+    "readingProgress",
+    String(bookId)
+  );
+
+  let oldProgress = {};
+
+  try {
+    const snapshot = await getDoc(ref);
+    if (snapshot.exists()) {
+      oldProgress = snapshot.data();
+    }
+  } catch {
+    // Continue with the known position.
+  }
+
+  const total = Math.max(
+    Number(totalParagraphs) || 0,
+    0
+  );
+
+  const activeParagraphIndex = Math.max(
+    0,
+    Math.min(
+      Number(paragraphIndex) || 0,
+      Math.max(total - 1, 0)
+    )
+  );
+
+  const now = new Date().toISOString();
+
+  await setDoc(
+    ref,
+    {
+      bookId: String(bookId),
+      title:
+        title ||
+        oldProgress.title ||
+        "Untitled",
+      author:
+        author ||
+        oldProgress.author ||
+        "",
+      image:
+        image ||
+        oldProgress.image ||
+        null,
+
+      activeParagraphIndex,
+      activePercent:
+        progressPercent(
+          activeParagraphIndex,
+          total
+        ),
+
+      totalParagraphs: total,
+      readingVersion: 4,
+      positionUpdatedAtISO: now,
+      updatedAtISO: now,
+      updatedAt: serverTimestamp()
+    },
+    { merge: true }
+  );
+
+  return {
+    activeParagraphIndex,
+    activePercent:
+      progressPercent(
+        activeParagraphIndex,
+        total
+      ),
+    verifiedParagraphIndex:
+      Number(
+        oldProgress.verifiedParagraphIndex ??
+        oldProgress.paragraphIndex ??
+        0
+      ) || 0,
+    percentComplete:
+      Number(oldProgress.percentComplete || 0)
+  };
+}
+
+/*
+ * Awards verified reading credit.
+ *
+ * Call this only after the reader has spent the required active-reading time
+ * on the next sequential paragraph. mergeReadingProgress prevents jumping
+ * ahead from manufacturing credit.
+ */
 export async function saveNativeReadingProgress({
   bookId,
   title,
@@ -138,13 +266,20 @@ export async function saveNativeReadingProgress({
 
       /*
        * paragraphIndex remains for compatibility with existing PWA/class
-       * code. It now reflects VERIFIED sequential reading.
+       * code. It reflects VERIFIED sequential reading.
        */
       paragraphIndex:
         merged.verifiedParagraphIndex,
 
+      /*
+       * Do not overwrite a newer navigation position with the paragraph
+       * currently being verified.
+       */
       activeParagraphIndex:
-        merged.activeParagraphIndex,
+        Number(
+          oldProgress.activeParagraphIndex ??
+          merged.activeParagraphIndex
+        ) || 0,
 
       verifiedParagraphIndex:
         merged.verifiedParagraphIndex,
@@ -155,10 +290,12 @@ export async function saveNativeReadingProgress({
         merged.percentComplete,
 
       activePercent:
-        merged.activePercent,
+        Number(
+          oldProgress.activePercent ??
+          merged.activePercent
+        ) || 0,
 
-      readingVersion: 3,
-      positionUpdatedAtISO: now,
+      readingVersion: 4,
       verifiedUpdatedAtISO:
         merged.verifiedParagraphIndex !==
         Number(
@@ -175,5 +312,17 @@ export async function saveNativeReadingProgress({
     { merge: true }
   );
 
-  return merged;
+  return {
+    ...merged,
+    activeParagraphIndex:
+      Number(
+        oldProgress.activeParagraphIndex ??
+        merged.activeParagraphIndex
+      ) || 0,
+    activePercent:
+      Number(
+        oldProgress.activePercent ??
+        merged.activePercent
+      ) || 0
+  };
 }
