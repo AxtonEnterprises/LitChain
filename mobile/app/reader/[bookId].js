@@ -17,10 +17,6 @@ import {
 } from "react-native";
 
 import {
-  MaterialCommunityIcons
-} from "@expo/vector-icons";
-
-import {
   router,
   useLocalSearchParams
 } from "expo-router";
@@ -41,87 +37,39 @@ import {
 } from "../../services/reading";
 
 export default function Reader() {
-  const params =
-    useLocalSearchParams();
+  const params = useLocalSearchParams();
 
-  const bookId =
-    String(
-      params.bookId || ""
-    );
-
-  const title =
-    String(
-      params.title || "Book"
-    );
-
-  const author =
-    String(
-      params.author || ""
-    );
+  const bookId = String(params.bookId || "");
+  const title = String(params.title || "Book");
+  const author = String(params.author || "");
 
   const requestedStart =
-    params.startParagraph !==
-    undefined
-      ? Math.max(
-          Number(
-            params.startParagraph
-          ) || 0,
-          0
-        )
+    params.startParagraph !== undefined
+      ? Math.max(Number(params.startParagraph) || 0, 0)
       : null;
 
-  const [text, setText] =
-    useState("");
+  const [text, setText] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(0);
+  const [font, setFont] = useState(18);
+  const [dark, setDark] = useState(false);
+  const [resume, setResume] = useState(0);
+  const [verified, setVerified] = useState(0);
+  const [activePercent, setActivePercent] = useState(0);
+  const [verifiedPercent, setVerifiedPercent] = useState(0);
 
-  const [loading, setLoading] =
-    useState(true);
+  const ref = useRef(null);
+  const width = Dimensions.get("window").width;
 
-  const [page, setPage] =
-    useState(0);
+  const paragraphs = useMemo(
+    () => splitBookParagraphs(text),
+    [text]
+  );
 
-  const [font, setFont] =
-    useState(18);
-
-  const [dark, setDark] =
-    useState(false);
-
-  const [resume, setResume] =
-    useState(0);
-
-  const [verified, setVerified] =
-    useState(0);
-
-  const [activePercent, setActivePercent] =
-    useState(0);
-
-  const [verifiedPercent, setVerifiedPercent] =
-    useState(0);
-
-  const ref =
-    useRef(null);
-
-  const width =
-    Dimensions
-      .get("window")
-      .width;
-
-  const paragraphs =
-    useMemo(
-      () =>
-        splitBookParagraphs(
-          text
-        ),
-      [text]
-    );
-
-  const pages =
-    useMemo(
-      () =>
-        paginateParagraphs(
-          paragraphs
-        ),
-      [paragraphs]
-    );
+  const pages = useMemo(
+    () => paginateParagraphs(paragraphs),
+    [paragraphs]
+  );
 
   useEffect(() => {
     let active = true;
@@ -129,144 +77,88 @@ export default function Reader() {
     (async () => {
       try {
         const progress =
-          await getNativeReadingProgress(
-            bookId
-          );
+          await getNativeReadingProgress(bookId);
 
         if (active) {
           setVerified(
             Number(
-              progress
-                ?.verifiedParagraphIndex ??
-              progress
-                ?.paragraphIndex ??
+              progress?.verifiedParagraphIndex ??
+              progress?.paragraphIndex ??
               0
             ) || 0
           );
 
           setActivePercent(
-            Number(
-              progress
-                ?.activePercent ||
-              0
-            )
+            Number(progress?.activePercent || 0)
           );
 
           setVerifiedPercent(
-            Number(
-              progress
-                ?.percentComplete ||
-              0
-            )
+            Number(progress?.percentComplete || 0)
           );
 
           setResume(
-            requestedStart !==
-            null
+            requestedStart !== null
               ? requestedStart
               : Number(
-                  progress
-                    ?.activeParagraphIndex ??
-                  progress
-                    ?.paragraphIndex ??
+                  progress?.activeParagraphIndex ??
+                  progress?.paragraphIndex ??
                   0
                 ) || 0
           );
         }
 
         const urls = [
-          `https://litchain.org/api/book-text?id=${encodeURIComponent(
-            bookId
-          )}`,
-          `https://litchain.org/api/book?id=${encodeURIComponent(
-            bookId
-          )}`
+          `https://litchain.org/api/book-text?id=${encodeURIComponent(bookId)}`,
+          `https://litchain.org/api/book?id=${encodeURIComponent(bookId)}`
         ];
 
         let loaded = "";
 
-        for (
-          const url of urls
-        ) {
-          const response =
-            await fetch(url);
-
-          if (!response.ok) {
-            continue;
-          }
+        for (const url of urls) {
+          const response = await fetch(url);
+          if (!response.ok) continue;
 
           const contentType =
-            response.headers.get(
-              "content-type"
-            ) || "";
+            response.headers.get("content-type") || "";
 
           const value =
-            contentType.includes(
-              "application/json"
-            )
+            contentType.includes("application/json")
               ? await response.json()
               : await response.text();
 
-          loaded =
-            normalizeBookText(
-              value
-            );
+          loaded = normalizeBookText(value);
 
-          if (loaded) {
-            break;
-          }
+          if (loaded) break;
         }
 
-        if (active) {
-          setText(loaded);
-        }
+        if (active) setText(loaded);
       } finally {
-        if (active) {
-          setLoading(false);
-        }
+        if (active) setLoading(false);
       }
     })();
 
     return () => {
       active = false;
     };
-  }, [
-    bookId,
-    requestedStart
-  ]);
+  }, [bookId, requestedStart]);
 
   useEffect(() => {
-    if (!pages.length) {
-      return;
-    }
+    if (!pages.length) return;
 
-    const index =
-      findResumePage(
-        pages,
-        resume
-      );
-
+    const index = findResumePage(pages, resume);
     setPage(index);
 
-    requestAnimationFrame(
-      () =>
-        ref.current
-          ?.scrollToIndex({
-            index,
-            animated: false
-          })
+    requestAnimationFrame(() =>
+      ref.current?.scrollToIndex({
+        index,
+        animated: false
+      })
     );
-  }, [
-    pages.length,
-    resume
-  ]);
+  }, [pages.length, resume]);
 
   async function persist(index) {
     const paragraphIndex =
-      pageStartParagraph(
-        pages,
-        index
-      );
+      pageStartParagraph(pages, index);
 
     const result =
       await saveNativeReadingProgress({
@@ -274,129 +166,70 @@ export default function Reader() {
         title,
         author,
         paragraphIndex,
-        totalParagraphs:
-          paragraphs.length
+        totalParagraphs: paragraphs.length
       });
 
     if (result) {
-      setVerified(
-        result.verifiedParagraphIndex
-      );
-
-      setActivePercent(
-        result.activePercent
-      );
-
-      setVerifiedPercent(
-        result.percentComplete
-      );
+      setVerified(result.verifiedParagraphIndex);
+      setActivePercent(result.activePercent);
+      setVerifiedPercent(result.percentComplete);
     }
   }
 
   function go(index) {
-    const safe =
-      Math.max(
-        0,
-        Math.min(
-          index,
-          Math.max(
-            pages.length - 1,
-            0
-          )
-        )
-      );
+    const safe = Math.max(
+      0,
+      Math.min(index, Math.max(pages.length - 1, 0))
+    );
 
     setPage(safe);
     persist(safe);
 
-    ref.current
-      ?.scrollToIndex({
-        index:
-          safe,
-        animated:
-          true
-      });
+    ref.current?.scrollToIndex({
+      index: safe,
+      animated: true
+    });
   }
 
-  const palette =
-    dark
-      ? {
-          bg:
-            "#111516",
-          surface:
-            "#171D1E",
-          text:
-            "#EEF3F3",
-          muted:
-            "#9BA9AA",
-          line:
-            "#263234"
-        }
-      : {
-          bg:
-            "#FFFDF8",
-          surface:
-            "#FFF",
-          text:
-            "#242A2B",
-          muted:
-            "#79888A",
-          line:
-            BRAND.line
-        };
+  const palette = dark
+    ? {
+        bg: "#111516",
+        surface: "#171D1E",
+        text: "#EEF3F3",
+        muted: "#9BA9AA",
+        line: "#263234"
+      }
+    : {
+        bg: "#FFFDF8",
+        surface: "#FFF",
+        text: "#242A2B",
+        muted: "#79888A",
+        line: BRAND.line
+      };
 
   if (loading) {
     return (
-      <SafeAreaView
-        style={[
-          styles.safe,
-          {
-            backgroundColor:
-              palette.bg
-          }
-        ]}
-      >
+      <SafeAreaView style={[styles.safe, { backgroundColor: palette.bg }]}>
         <View style={styles.center}>
-          <ActivityIndicator
-            size="large"
-          />
+          <ActivityIndicator size="large" />
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView
-      style={[
-        styles.safe,
-        {
-          backgroundColor:
-            palette.bg
-        }
-      ]}
-    >
+    <SafeAreaView style={[styles.safe, { backgroundColor: palette.bg }]}>
       <View
         style={[
           styles.header,
           {
-            backgroundColor:
-              palette.surface,
-            borderBottomColor:
-              palette.line
+            backgroundColor: palette.surface,
+            borderBottomColor: palette.line
           }
         ]}
       >
-        <Pressable
-          onPress={() =>
-            router.back()
-          }
-          style={styles.headerIcon}
-        >
-          <MaterialCommunityIcons
-            name="chevron-left"
-            size={28}
-            color={BRAND.tealDark}
-          />
+        <Pressable onPress={() => router.back()} style={styles.headerIcon}>
+          <Text style={styles.navGlyph}>‹</Text>
         </Pressable>
 
         <View style={styles.titleWrap}>
@@ -404,10 +237,7 @@ export default function Reader() {
             numberOfLines={1}
             style={[
               styles.title,
-              {
-                color:
-                  palette.text
-              }
+              { color: palette.text }
             ]}
           >
             {title}
@@ -417,8 +247,7 @@ export default function Reader() {
             <Text
               numberOfLines={1}
               style={{
-                color:
-                  palette.muted,
+                color: palette.muted,
                 fontSize: 11
               }}
             >
@@ -428,27 +257,17 @@ export default function Reader() {
         </View>
 
         <Pressable
-          onPress={() =>
-            setDark(
-              (value) =>
-                !value
-            )
-          }
+          onPress={() => setDark((value) => !value)}
           style={styles.headerIcon}
         >
-          <MaterialCommunityIcons
-            name={
-              dark
-                ? "white-balance-sunny"
-                : "weather-night"
-            }
-            size={21}
-            color={
-              dark
-                ? "#EEF3F3"
-                : BRAND.ink
-            }
-          />
+          <Text
+            style={[
+              styles.modeGlyph,
+              { color: dark ? "#EEF3F3" : BRAND.ink }
+            ]}
+          >
+            {dark ? "☀" : "☾"}
+          </Text>
         </Pressable>
       </View>
 
@@ -456,10 +275,8 @@ export default function Reader() {
         style={[
           styles.progressWrap,
           {
-            backgroundColor:
-              palette.surface,
-            borderBottomColor:
-              palette.line
+            backgroundColor: palette.surface,
+            borderBottomColor: palette.line
           }
         ]}
       >
@@ -467,10 +284,7 @@ export default function Reader() {
           <Text
             style={[
               styles.progressLabel,
-              {
-                color:
-                  palette.muted
-              }
+              { color: palette.muted }
             ]}
           >
             Active
@@ -478,10 +292,7 @@ export default function Reader() {
           <Text
             style={[
               styles.progressValue,
-              {
-                color:
-                  palette.text
-              }
+              { color: palette.text }
             ]}
           >
             {activePercent}%
@@ -492,10 +303,7 @@ export default function Reader() {
           <Text
             style={[
               styles.progressLabel,
-              {
-                color:
-                  palette.muted
-              }
+              { color: palette.muted }
             ]}
           >
             Verified
@@ -503,10 +311,7 @@ export default function Reader() {
           <Text
             style={[
               styles.progressValue,
-              {
-                color:
-                  BRAND.tealDark
-              }
+              { color: BRAND.tealDark }
             ]}
           >
             {verifiedPercent}%
@@ -516,14 +321,10 @@ export default function Reader() {
         <Text
           style={[
             styles.verifiedParagraph,
-            {
-              color:
-                palette.muted
-            }
+            { color: palette.muted }
           ]}
         >
-          verified through ¶
-          {verified + 1}
+          verified through ¶{verified + 1}
         </Text>
       </View>
 
@@ -532,90 +333,47 @@ export default function Reader() {
         horizontal
         pagingEnabled
         data={pages}
-        keyExtractor={(
-          _,
-          index
-        ) =>
-          String(index)
-        }
-        showsHorizontalScrollIndicator={
-          false
-        }
-        getItemLayout={(
-          _,
-          index
-        ) => ({
+        keyExtractor={(_, index) => String(index)}
+        showsHorizontalScrollIndicator={false}
+        getItemLayout={(_, index) => ({
           length: width,
-          offset:
-            width *
-            index,
+          offset: width * index,
           index
         })}
-        onMomentumScrollEnd={(
-          event
-        ) => {
-          const next =
-            Math.round(
-              event
-                .nativeEvent
-                .contentOffset
-                .x /
-                Math.max(
-                  width,
-                  1
-                )
-            );
+        onMomentumScrollEnd={(event) => {
+          const next = Math.round(
+            event.nativeEvent.contentOffset.x /
+              Math.max(width, 1)
+          );
 
           setPage(next);
           persist(next);
         }}
-        renderItem={({
-          item
-        }) => (
-          <View
-            style={[
-              styles.page,
-              { width }
-            ]}
-          >
-            {item.map(
-              (paragraph) => (
-                <View
-                  key={
-                    paragraph.index
-                  }
-                  style={styles.row}
+        renderItem={({ item }) => (
+          <View style={[styles.page, { width }]}>
+            {item.map((paragraph) => (
+              <View key={paragraph.index} style={styles.row}>
+                <Text
+                  style={[
+                    styles.num,
+                    { color: palette.muted }
+                  ]}
                 >
-                  <Text
-                    style={[
-                      styles.num,
-                      {
-                        color:
-                          palette.muted
-                      }
-                    ]}
-                  >
-                    {paragraph.index +
-                      1}
-                  </Text>
+                  {paragraph.index + 1}
+                </Text>
 
-                  <Text
-                    style={{
-                      flex: 1,
-                      color:
-                        palette.text,
-                      fontSize:
-                        font,
-                      lineHeight:
-                        font *
-                        1.55
-                    }}
-                  >
-                    {paragraph.text}
-                  </Text>
-                </View>
-              )
-            )}
+                <Text
+                  style={{
+                    flex: 1,
+                    color: palette.text,
+                    fontSize: font,
+                    lineHeight: font * 1.55
+                  }}
+                >
+                  {paragraph.text}
+                </Text>
+              </View>
+            ))}
           </View>
         )}
       />
@@ -624,185 +382,147 @@ export default function Reader() {
         style={[
           styles.controls,
           {
-            backgroundColor:
-              palette.surface,
-            borderTopColor:
-              palette.line
+            backgroundColor: palette.surface,
+            borderTopColor: palette.line
           }
         ]}
       >
-        <Pressable
-          onPress={() =>
-            go(
-              page - 1
-            )
-          }
-          style={styles.controlButton}
-        >
-          <MaterialCommunityIcons
-            name="chevron-left"
-            size={26}
-            color={BRAND.tealDark}
-          />
+        <Pressable onPress={() => go(page - 1)} style={styles.controlButton}>
+          <Text style={styles.navGlyph}>‹</Text>
         </Pressable>
 
         <Pressable
           onPress={() =>
-            setFont(
-              (value) =>
-                Math.max(
-                  14,
-                  value - 1
-                )
-            )
+            setFont((value) => Math.max(14, value - 1))
           }
           style={styles.controlButton}
         >
-          <Text style={styles.controlText}>
-            A−
-          </Text>
+          <Text style={styles.controlText}>A−</Text>
         </Pressable>
 
         <Text
           style={{
-            color:
-              palette.muted,
+            color: palette.muted,
             fontWeight: "700"
           }}
         >
-          {page + 1}/
-          {Math.max(
-            pages.length,
-            1
-          )}
+          {page + 1}/{Math.max(pages.length, 1)}
         </Text>
 
         <Pressable
           onPress={() =>
-            setFont(
-              (value) =>
-                Math.min(
-                  28,
-                  value + 1
-                )
-            )
+            setFont((value) => Math.min(28, value + 1))
           }
           style={styles.controlButton}
         >
-          <Text style={styles.controlText}>
-            A+
-          </Text>
+          <Text style={styles.controlText}>A+</Text>
         </Pressable>
 
-        <Pressable
-          onPress={() =>
-            go(
-              page + 1
-            )
-          }
-          style={styles.controlButton}
-        >
-          <MaterialCommunityIcons
-            name="chevron-right"
-            size={26}
-            color={BRAND.tealDark}
-          />
+        <Pressable onPress={() => go(page + 1)} style={styles.controlButton}>
+          <Text style={styles.navGlyph}>›</Text>
         </Pressable>
       </View>
     </SafeAreaView>
   );
 }
 
-const styles =
-  StyleSheet.create({
-    safe: {
-      flex: 1
-    },
-    center: {
-      flex: 1,
-      alignItems: "center",
-      justifyContent: "center"
-    },
-    header: {
-      minHeight: 68,
-      paddingHorizontal: 10,
-      borderBottomWidth: 1,
-      flexDirection: "row",
-      alignItems: "center"
-    },
-    headerIcon: {
-      width: 42,
-      height: 42,
-      alignItems: "center",
-      justifyContent: "center"
-    },
-    titleWrap: {
-      flex: 1,
-      paddingHorizontal: 6
-    },
-    title: {
-      fontWeight: "900",
-      fontSize: 17
-    },
-    progressWrap: {
-      minHeight: 44,
-      paddingHorizontal: 16,
-      borderBottomWidth: 1,
-      flexDirection: "row",
-      gap: 18,
-      alignItems: "center"
-    },
-    progressCopy: {
-      flexDirection: "row",
-      gap: 4,
-      alignItems: "baseline"
-    },
-    progressLabel: {
-      fontSize: 9,
-      textTransform: "uppercase",
-      fontWeight: "800"
-    },
-    progressValue: {
-      fontSize: 12,
-      fontWeight: "900"
-    },
-    verifiedParagraph: {
-      flex: 1,
-      textAlign: "right",
-      fontSize: 9
-    },
-    page: {
-      flex: 1,
-      paddingHorizontal: 20,
-      paddingVertical: 22
-    },
-    row: {
-      flexDirection: "row",
-      alignItems: "flex-start",
-      marginBottom: 18
-    },
-    num: {
-      width: 34,
-      fontSize: 10,
-      paddingTop: 4
-    },
-    controls: {
-      minHeight: 62,
-      borderTopWidth: 1,
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-around"
-    },
-    controlButton: {
-      minWidth: 44,
-      minHeight: 44,
-      alignItems: "center",
-      justifyContent: "center"
-    },
-    controlText: {
-      color:
-        BRAND.tealDark,
-      fontSize: 16,
-      fontWeight: "900"
-    }
-  });
+const styles = StyleSheet.create({
+  safe: {
+    flex: 1
+  },
+  center: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  header: {
+    minHeight: 68,
+    paddingHorizontal: 10,
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    alignItems: "center"
+  },
+  headerIcon: {
+    width: 42,
+    height: 42,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  navGlyph: {
+    color: BRAND.tealDark,
+    fontSize: 30,
+    fontWeight: "700"
+  },
+  modeGlyph: {
+    fontSize: 21,
+    fontWeight: "900"
+  },
+  titleWrap: {
+    flex: 1,
+    paddingHorizontal: 6
+  },
+  title: {
+    fontWeight: "900",
+    fontSize: 17
+  },
+  progressWrap: {
+    minHeight: 44,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    gap: 18,
+    alignItems: "center"
+  },
+  progressCopy: {
+    flexDirection: "row",
+    gap: 4,
+    alignItems: "baseline"
+  },
+  progressLabel: {
+    fontSize: 9,
+    textTransform: "uppercase",
+    fontWeight: "800"
+  },
+  progressValue: {
+    fontSize: 12,
+    fontWeight: "900"
+  },
+  verifiedParagraph: {
+    flex: 1,
+    textAlign: "right",
+    fontSize: 9
+  },
+  page: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingVertical: 22
+  },
+  row: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 18
+  },
+  num: {
+    width: 34,
+    fontSize: 10,
+    paddingTop: 4
+  },
+  controls: {
+    minHeight: 62,
+    borderTopWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-around"
+  },
+  controlButton: {
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  controlText: {
+    color: BRAND.tealDark,
+    fontSize: 16,
+    fontWeight: "900"
+  }
+});
