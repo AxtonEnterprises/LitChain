@@ -27,6 +27,12 @@ import {
 } from "../services/social";
 
 import {
+  cancelNativeGroupJoinRequest,
+  getNativeDiscoverableGroups,
+  joinNativeGroup
+} from "../services/groupMembership";
+
+import {
   groupAvatarUrl
 } from "../../shared/groupAvatars";
 
@@ -49,13 +55,33 @@ export default function Groups() {
   const [queryText, setQueryText] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [viewportHeight, setViewportHeight] = useState(0);
-  const [activeIndex, setActiveIndex] = useState(0);
+  const [busyId, setBusyId] = useState("");
+  const [status, setStatus] = useState("");
+  const [viewportHeight, setViewportHeight] =
+    useState(0);
+  const [activeIndex, setActiveIndex] =
+    useState(0);
 
   async function load() {
     try {
       setLoading(true);
-      setBundle(await getNativeGroups());
+      setStatus("");
+
+      const [nativeBundle, discoverable] =
+        await Promise.all([
+          getNativeGroups(),
+          getNativeDiscoverableGroups()
+        ]);
+
+      setBundle({
+        ...nativeBundle,
+        discoverable
+      });
+    } catch (error) {
+      setStatus(
+        error?.message ||
+          "Groups could not be loaded."
+      );
     } finally {
       setLoading(false);
     }
@@ -67,7 +93,8 @@ export default function Groups() {
 
   const groups = useMemo(() => {
     const source = bundle[view] || [];
-    const term = queryText.trim().toLowerCase();
+    const term =
+      queryText.trim().toLowerCase();
 
     if (!term) return source;
 
@@ -91,6 +118,8 @@ export default function Groups() {
   }, [view, queryText]);
 
   function open(group) {
+    if (!group.membership) return;
+
     router.push({
       pathname: "/group/[groupId]",
       params: {
@@ -101,6 +130,53 @@ export default function Groups() {
         description: group.description || ""
       }
     });
+  }
+
+  async function join(group) {
+    try {
+      setBusyId(String(group.id));
+      const result =
+        await joinNativeGroup(group);
+
+      setStatus(
+        result.status === "joined"
+          ? `Joined ${group.name}.`
+          : `Join request sent to ${group.name}.`
+      );
+
+      await load();
+
+      if (result.status === "joined") {
+        setView("mine");
+      }
+    } catch (error) {
+      setStatus(
+        error?.message ||
+          "Could not join this group."
+      );
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  async function cancel(group) {
+    try {
+      setBusyId(String(group.id));
+
+      await cancelNativeGroupJoinRequest(
+        group.id
+      );
+
+      setStatus("Join request canceled.");
+      await load();
+    } catch (error) {
+      setStatus(
+        error?.message ||
+          "Could not cancel the request."
+      );
+    } finally {
+      setBusyId("");
+    }
   }
 
   if (loading) {
@@ -117,7 +193,7 @@ export default function Groups() {
     <SafeAreaView style={styles.safe}>
       <AppHeader
         title="Groups"
-        subtitle="Swipe vertically to browse · tap to open"
+        subtitle="Swipe vertically to browse"
       />
 
       <View style={styles.toolbar}>
@@ -128,7 +204,8 @@ export default function Groups() {
               onPress={() => setView(id)}
               style={[
                 styles.tab,
-                view === id && styles.tabActive
+                view === id &&
+                  styles.tabActive
               ]}
             >
               <Text
@@ -149,10 +226,16 @@ export default function Groups() {
           style={styles.searchToggle}
         >
           <Text style={styles.searchToggleText}>
-            🔎
+            ⌕
           </Text>
         </Pressable>
       </View>
+
+      {!!status && (
+        <Text style={styles.status}>
+          {status}
+        </Text>
+      )}
 
       <View
         style={styles.viewport}
@@ -191,7 +274,6 @@ export default function Groups() {
                 event.nativeEvent.contentOffset.y /
                   Math.max(viewportHeight, 1)
               );
-
               setActiveIndex(next);
             }}
             ListEmptyComponent={
@@ -208,17 +290,16 @@ export default function Groups() {
                       ? "No classes yet"
                       : "No groups yet"}
                 </Text>
-
-                <Text style={styles.emptyBody}>
-                  {view === "discoverable"
-                    ? "Discovery data is being completed in Batch 3B."
-                    : "Your memberships will appear here."}
-                </Text>
               </View>
             }
             renderItem={({ item }) => {
               const avatar =
                 groupAvatarUrl(item.avatar);
+              const pending =
+                item.joinRequest?.status ===
+                "pending";
+              const busy =
+                busyId === String(item.id);
 
               return (
                 <View
@@ -229,6 +310,9 @@ export default function Groups() {
                 >
                   <Pressable
                     onPress={() => open(item)}
+                    disabled={
+                      view === "discoverable"
+                    }
                     style={styles.card}
                   >
                     {!!avatar && (
@@ -239,9 +323,7 @@ export default function Groups() {
                     )}
 
                     <Text style={styles.eyebrow}>
-                      {item.type === "class"
-                        ? "CLASS"
-                        : "READING GROUP"}
+                      READING GROUP
                     </Text>
 
                     <Text style={styles.title}>
@@ -250,26 +332,97 @@ export default function Groups() {
 
                     {!!item.description && (
                       <Text
-                        numberOfLines={6}
+                        numberOfLines={7}
                         style={styles.description}
                       >
                         {item.description}
                       </Text>
                     )}
 
-                    <View style={styles.cardFooter}>
-                      <Text style={styles.role}>
-                        {item.membership?.role ||
-                          (
-                            view === "discoverable"
-                              ? "Discover"
-                              : "Member"
-                          )}
+                    <View style={styles.metaRow}>
+                      <Text style={styles.meta}>
+                        {item.joinPolicy ===
+                        "open"
+                          ? "Open"
+                          : item.joinPolicy ===
+                              "request_to_join"
+                            ? "Request to join"
+                            : "Invite only"}
                       </Text>
 
-                      <Text style={styles.openHint}>
-                        Tap to open ›
-                      </Text>
+                      {!!item.membership && (
+                        <Text style={styles.meta}>
+                          {item.membership.role ||
+                            "Member"}
+                        </Text>
+                      )}
+                    </View>
+
+                    <View style={styles.cardFooter}>
+                      {view ===
+                      "discoverable" ? (
+                        pending ? (
+                          <Pressable
+                            disabled={busy}
+                            onPress={() =>
+                              cancel(item)
+                            }
+                            style={
+                              styles.secondaryButton
+                            }
+                          >
+                            <Text
+                              style={
+                                styles.secondaryButtonText
+                              }
+                            >
+                              Cancel Request
+                            </Text>
+                          </Pressable>
+                        ) : item.joinPolicy ===
+                            "invite_only" ? (
+                          <View
+                            style={
+                              styles.inviteOnly
+                            }
+                          >
+                            <Text
+                              style={
+                                styles.inviteOnlyText
+                              }
+                            >
+                              Invite only
+                            </Text>
+                          </View>
+                        ) : (
+                          <Pressable
+                            disabled={busy}
+                            onPress={() =>
+                              join(item)
+                            }
+                            style={
+                              styles.primaryButton
+                            }
+                          >
+                            <Text
+                              style={
+                                styles.primaryButtonText
+                              }
+                            >
+                              {item.joinPolicy ===
+                              "open"
+                                ? "Join Group"
+                                : "Request to Join"}
+                            </Text>
+                          </Pressable>
+                        )
+                      ) : (
+                        <Text
+                          style={styles.openHint}
+                        >
+                          Tap to open ›
+                        </Text>
+                      )}
                     </View>
                   </Pressable>
                 </View>
@@ -283,16 +436,18 @@ export default function Groups() {
             pointerEvents="none"
             style={styles.verticalDots}
           >
-            {groups.slice(0, 12).map((item, index) => (
-              <View
-                key={item.id}
-                style={[
-                  styles.dot,
-                  index === activeIndex &&
-                    styles.dotActive
-                ]}
-              />
-            ))}
+            {groups
+              .slice(0, 12)
+              .map((item, index) => (
+                <View
+                  key={item.id}
+                  style={[
+                    styles.dot,
+                    index === activeIndex &&
+                      styles.dotActive
+                  ]}
+                />
+              ))}
           </View>
         )}
       </View>
@@ -309,20 +464,16 @@ export default function Groups() {
       >
         <Pressable
           style={styles.overlay}
-          onPress={() => setSearchOpen(false)}
+          onPress={() =>
+            setSearchOpen(false)
+          }
         >
           <Pressable
             onPress={() => {}}
             style={styles.searchPopup}
           >
             <Text style={styles.searchTitle}>
-              Search {
-                view === "mine"
-                  ? "My Groups"
-                  : view === "classes"
-                    ? "My Classes"
-                    : "Groups"
-              }
+              Search Groups
             </Text>
 
             <TextInput
@@ -339,7 +490,9 @@ export default function Groups() {
               }
               style={styles.doneButton}
             >
-              <Text style={styles.doneButtonText}>
+              <Text
+                style={styles.doneButtonText}
+              >
                 Done
               </Text>
             </Pressable>
@@ -362,7 +515,6 @@ const styles = StyleSheet.create({
   },
   toolbar: {
     flexDirection: "row",
-    alignItems: "center",
     gap: 8,
     padding: 10,
     backgroundColor: BRAND.surface,
@@ -393,7 +545,7 @@ const styles = StyleSheet.create({
     fontSize: 11
   },
   tabTextActive: {
-    color: "#FFFFFF"
+    color: "#FFF"
   },
   searchToggle: {
     width: 40,
@@ -405,15 +557,22 @@ const styles = StyleSheet.create({
     justifyContent: "center"
   },
   searchToggleText: {
-    fontSize: 16
+    color: BRAND.tealDark,
+    fontSize: 22,
+    fontWeight: "900"
+  },
+  status: {
+    padding: 8,
+    textAlign: "center",
+    backgroundColor: "#FFF8DF",
+    color: "#6D5A16"
   },
   viewport: {
     flex: 1,
     position: "relative"
   },
   page: {
-    padding: 16,
-    justifyContent: "flex-start"
+    padding: 16
   },
   card: {
     flex: 1,
@@ -447,18 +606,56 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 15
   },
+  metaRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 16
+  },
+  meta: {
+    color: BRAND.tealDark,
+    fontWeight: "800",
+    fontSize: 11
+  },
   cardFooter: {
     marginTop: "auto",
-    paddingTop: 18,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between"
+    paddingTop: 18
   },
-  role: {
+  openHint: {
+    color: BRAND.muted,
+    textAlign: "right",
+    fontWeight: "800"
+  },
+  primaryButton: {
+    minHeight: 48,
+    borderRadius: 13,
+    backgroundColor: BRAND.teal,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  primaryButtonText: {
+    color: "#FFF",
+    fontWeight: "900"
+  },
+  secondaryButton: {
+    minHeight: 48,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: BRAND.teal,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  secondaryButtonText: {
     color: BRAND.tealDark,
     fontWeight: "900"
   },
-  openHint: {
+  inviteOnly: {
+    minHeight: 48,
+    borderRadius: 13,
+    backgroundColor: "#EEF2F2",
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  inviteOnlyText: {
     color: BRAND.muted,
     fontWeight: "800"
   },
@@ -484,15 +681,9 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: "900"
   },
-  emptyBody: {
-    color: BRAND.muted,
-    textAlign: "center",
-    marginTop: 8
-  },
   overlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.35)",
-    justifyContent: "flex-start",
     paddingTop: 120,
     paddingHorizontal: 20
   },
@@ -514,8 +705,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: BRAND.line,
     borderRadius: 13,
-    paddingHorizontal: 12,
-    color: BRAND.ink
+    paddingHorizontal: 12
   },
   doneButton: {
     minHeight: 44,
@@ -526,7 +716,7 @@ const styles = StyleSheet.create({
     marginTop: 12
   },
   doneButtonText: {
-    color: "#FFFFFF",
+    color: "#FFF",
     fontWeight: "900"
   }
 });
