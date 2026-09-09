@@ -19,10 +19,11 @@ import {
 } from "expo-router";
 
 import BottomNav from "../../components/BottomNav";
+import LitIcon from "../../components/LitIcon";
 
 import {
-  getNativeGroupForum
-} from "../../services/social";
+  getNativeGroupForumDisplay
+} from "../../services/groupDisplay";
 
 import { BRAND } from "../../../shared/brand";
 
@@ -51,7 +52,7 @@ export default function Group() {
   const [activeIndex, setActiveIndex] = useState(0);
 
   useEffect(() => {
-    getNativeGroupForum(id)
+    getNativeGroupForumDisplay(id)
       .then(setPosts)
       .finally(() => setLoading(false));
   }, [id]);
@@ -303,28 +304,31 @@ export default function Group() {
                         "Discussion"}
                     </Text>
 
-                    {(author || date) && (
-                      <Text style={styles.byline}>
-                        {[
-                          author,
-                          date
-                        ]
-                          .filter(Boolean)
-                          .join(" · ")}
-                      </Text>
-                    )}
+                    <Text style={styles.byline}>
+                      {author
+                        ? `Posted by ${author}`
+                        : "Posted by Reader"}
+                      {date ? ` · ${date}` : ""}
+                    </Text>
 
                     {!!preview && (
                       <View style={styles.context}>
+                        <Text style={styles.contextLabel}>
+                          REFERENCED PARAGRAPH ¶
+                          {Number(
+                            item.sourceParagraphIndex || 0
+                          ) + 1}
+                        </Text>
+
                         <Text
-                          numberOfLines={5}
+                          numberOfLines={7}
                           style={styles.contextText}
                         >
                           “{preview}”
                         </Text>
 
                         <Text style={styles.contextHint}>
-                          Referenced text · open for Read Context
+                          Open discussion to Read Context
                         </Text>
                       </View>
                     )}
@@ -339,12 +343,17 @@ export default function Group() {
                     )}
 
                     <View style={styles.voteSummary}>
-                      <Text style={styles.voteText}>
-                        Reinforce{" "}
-                        {Number(
-                          item.forumUpCount || 0
-                        )}
-                      </Text>
+                      <View style={styles.voteSide}>
+                        <LitIcon
+                          name="link"
+                          size={20}
+                        />
+                        <Text style={styles.voteText}>
+                          {Number(
+                            item.forumUpCount || 0
+                          )}
+                        </Text>
+                      </View>
 
                       <Text style={styles.score}>
                         {Number(
@@ -352,12 +361,17 @@ export default function Group() {
                         )}
                       </Text>
 
-                      <Text style={styles.voteText}>
-                        Break{" "}
-                        {Number(
-                          item.forumDownCount || 0
-                        )}
-                      </Text>
+                      <View style={styles.voteSide}>
+                        <LitIcon
+                          name="unlink"
+                          size={20}
+                        />
+                        <Text style={styles.voteText}>
+                          {Number(
+                            item.forumDownCount || 0
+                          )}
+                        </Text>
+                      </View>
                     </View>
 
                     <Text style={styles.hint}>
@@ -484,6 +498,13 @@ const styles = StyleSheet.create({
     borderLeftColor: BRAND.teal,
     paddingLeft: 12
   },
+  contextLabel: {
+    color: BRAND.tealDark,
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 0.7,
+    marginBottom: 7
+  },
   contextText: {
     color: BRAND.ink,
     fontStyle: "italic",
@@ -506,6 +527,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between"
+  },
+  voteSide: {
+    minWidth: 70,
+    flexDirection: "row",
+    gap: 7,
+    alignItems: "center"
   },
   voteText: {
     color: BRAND.tealDark,
