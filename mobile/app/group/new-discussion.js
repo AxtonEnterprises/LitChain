@@ -34,6 +34,14 @@ export default function NewDiscussion() {
     String(params.name || "Group");
   const role =
     String(params.role || "");
+  const sourceBookId = String(params.sourceBookId || "");
+  const sourceTitle = String(params.sourceTitle || "");
+  const sourceAuthor = String(params.sourceAuthor || "");
+  const sourceParagraphIndex = Math.max(
+    Number(params.sourceParagraphIndex) || 0,
+    0
+  );
+  const paragraphPreview = String(params.paragraphPreview || "");
 
   const [title, setTitle] =
     useState("");
@@ -53,7 +61,12 @@ export default function NewDiscussion() {
         await createNativeGroupDiscussion({
           groupId,
           title,
-          body
+          body,
+          sourceBookId,
+          sourceTitle,
+          sourceAuthor,
+          sourceParagraphIndex,
+          paragraphPreview
         });
 
       router.replace({
@@ -70,7 +83,12 @@ export default function NewDiscussion() {
           forumDownCount: "0",
           forumScore: "0",
           pinned: "0",
-          locked: "0"
+          locked: "0",
+          sourceBookId: post.sourceBookId || "",
+          sourceTitle: post.sourceTitle || "",
+          sourceAuthor: post.sourceAuthor || "",
+          sourceParagraphIndex: String(post.sourceParagraphIndex ?? 0),
+          paragraphPreview: post.paragraphPreview || ""
         }
       });
     } catch (error) {
@@ -100,6 +118,23 @@ export default function NewDiscussion() {
       </View>
 
       <View style={styles.content}>
+        {!!sourceBookId && (
+          <View style={styles.contextCard}>
+            <Text style={styles.contextLabel}>
+              REFERENCED PARAGRAPH ¶{sourceParagraphIndex + 1}
+            </Text>
+            <Text style={styles.contextTitle}>
+              {sourceTitle || "Referenced book"}
+              {sourceAuthor ? ` · ${sourceAuthor}` : ""}
+            </Text>
+            {!!paragraphPreview && (
+              <Text numberOfLines={5} style={styles.contextText}>
+                “{paragraphPreview}”
+              </Text>
+            )}
+          </View>
+        )}
+
         <TextInput
           value={title}
           onChangeText={setTitle}
@@ -178,6 +213,29 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 18
+  },
+  contextCard: {
+    backgroundColor: BRAND.surface,
+    borderWidth: 1,
+    borderColor: BRAND.line,
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 12
+  },
+  contextLabel: {
+    color: BRAND.tealDark,
+    fontSize: 11,
+    fontWeight: "900"
+  },
+  contextTitle: {
+    color: BRAND.ink,
+    fontWeight: "800",
+    marginTop: 5
+  },
+  contextText: {
+    color: BRAND.muted,
+    marginTop: 8,
+    lineHeight: 20
   },
   input: {
     minHeight: 48,

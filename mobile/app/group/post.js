@@ -7,6 +7,7 @@ import {
 import {
   ActivityIndicator,
   FlatList,
+  Modal,
   Pressable,
   SafeAreaView,
   Share,
@@ -29,9 +30,12 @@ import {
   getNativeGroupForumReplies,
   getNativeGroupForumVote,
   replyNativeGroupForumPost,
-  reportNativeGroupForumNode,
   voteNativeGroupForumNode
 } from "../../services/groupForum";
+
+import {
+  reportNativeGroupForumContent
+} from "../../services/groupModeration";
 
 import {
   deleteNativeGroupPost,
@@ -88,6 +92,10 @@ export default function GroupPostScreen() {
   const [replyText, setReplyText] =
     useState("");
   const [status, setStatus] = useState("");
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportReason, setReportReason] = useState("other");
+  const [reportDetails, setReportDetails] = useState("");
+  const [reporting, setReporting] = useState(false);
   const [postVote, setPostVote] =
     useState(0);
   const [postCounts, setPostCounts] =
@@ -273,21 +281,28 @@ export default function GroupPostScreen() {
 
   async function reportPost() {
     try {
-      await reportNativeGroupForumNode({
+      setReporting(true);
+      await reportNativeGroupForumContent({
         groupId,
         postId,
-        targetUserId: postUserId,
+        reportedUserId: postUserId,
         title,
         body,
-        reason: "other"
+        reason: reportReason,
+        details: reportDetails
       });
 
-      setStatus("Report submitted.");
+      setReportOpen(false);
+      setReportReason("other");
+      setReportDetails("");
+      setStatus("Report submitted for moderator review.");
     } catch (error) {
       setStatus(
         error?.message ||
           "Could not submit report."
       );
+    } finally {
+      setReporting(false);
     }
   }
 
@@ -479,7 +494,7 @@ export default function GroupPostScreen() {
 
           {!!postUserId && (
             <Pressable
-              onPress={reportPost}
+              onPress={() => setReportOpen(true)}
               style={styles.quickAction}
             >
               <LitIcon
@@ -790,6 +805,75 @@ export default function GroupPostScreen() {
         </View>
       )}
 
+      <Modal
+        visible={reportOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setReportOpen(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.reportModal}>
+            <Text style={styles.reportTitle}>Report discussion</Text>
+            <Text style={styles.reportCopy}>
+              Choose a reason and add any details for the group moderators.
+            </Text>
+
+            <View style={styles.reportReasons}>
+              {[
+                ["spam", "Spam"],
+                ["harassment", "Harassment"],
+                ["inappropriate", "Inappropriate"],
+                ["other", "Other"]
+              ].map(([value, label]) => (
+                <Pressable
+                  key={value}
+                  onPress={() => setReportReason(value)}
+                  style={[
+                    styles.reasonChip,
+                    reportReason === value && styles.reasonChipActive
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.reasonText,
+                      reportReason === value && styles.reasonTextActive
+                    ]}
+                  >
+                    {label}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <TextInput
+              value={reportDetails}
+              onChangeText={setReportDetails}
+              placeholder="Details (optional)"
+              multiline
+              style={styles.reportInput}
+            />
+
+            <View style={styles.reportActions}>
+              <Pressable
+                onPress={() => setReportOpen(false)}
+                style={styles.reportCancel}
+              >
+                <Text style={styles.reportCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                disabled={reporting}
+                onPress={reportPost}
+                style={styles.reportSubmit}
+              >
+                <Text style={styles.reportSubmitText}>
+                  {reporting ? "Submitting…" : "Submit report"}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <BottomNav active="groups" />
     </SafeAreaView>
   );
@@ -963,6 +1047,92 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: 7,
     textAlign: "center"
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 20
+  },
+  reportModal: {
+    width: "100%",
+    maxWidth: 520,
+    backgroundColor: BRAND.surface,
+    borderRadius: 20,
+    padding: 18
+  },
+  reportTitle: {
+    color: BRAND.ink,
+    fontSize: 20,
+    fontWeight: "900"
+  },
+  reportCopy: {
+    color: BRAND.muted,
+    marginTop: 6,
+    lineHeight: 20
+  },
+  reportReasons: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 14
+  },
+  reasonChip: {
+    borderWidth: 1,
+    borderColor: BRAND.line,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8
+  },
+  reasonChipActive: {
+    backgroundColor: BRAND.teal
+  },
+  reasonText: {
+    color: BRAND.ink,
+    fontWeight: "800"
+  },
+  reasonTextActive: {
+    color: "#FFF"
+  },
+  reportInput: {
+    minHeight: 90,
+    borderWidth: 1,
+    borderColor: BRAND.line,
+    borderRadius: 12,
+    padding: 10,
+    marginTop: 14,
+    textAlignVertical: "top"
+  },
+  reportActions: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 14
+  },
+  reportCancel: {
+    flex: 1,
+    minHeight: 44,
+    borderWidth: 1,
+    borderColor: BRAND.line,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  reportCancelText: {
+    color: BRAND.ink,
+    fontWeight: "900"
+  },
+  reportSubmit: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 12,
+    backgroundColor: BRAND.teal,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  reportSubmitText: {
+    color: "#FFF",
+    fontWeight: "900"
   },
   center: {
     alignItems: "center",

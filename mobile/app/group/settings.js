@@ -36,6 +36,12 @@ import {
 } from "../../services/groupDisplay";
 
 import {
+  getNativeGroupModerationReports,
+  removeReportedNativeGroupContent,
+  resolveNativeGroupModerationReport
+} from "../../services/groupModeration";
+
+import {
   getNativeGroupJoinRequests,
   getNativeGroupMembers,
   respondNativeGroupJoinRequest,
@@ -81,6 +87,7 @@ export default function Settings() {
   const [posts, setPosts] = useState([]);
   const [members, setMembers] = useState([]);
   const [requests, setRequests] = useState([]);
+  const [reports, setReports] = useState([]);
   const [status, setStatus] = useState("");
 
   const canAdmin =
@@ -95,13 +102,17 @@ export default function Settings() {
         loadedGroup,
         loadedPosts,
         loadedMembers,
-        loadedRequests
+        loadedRequests,
+        loadedReports
       ] = await Promise.all([
         getNativeGroupSettings(groupId),
         getNativeGroupForumDisplay(groupId),
         getNativeGroupMembers(groupId),
         canAdmin
           ? getNativeGroupJoinRequests(groupId)
+          : Promise.resolve([]),
+        canModerate
+          ? getNativeGroupModerationReports(groupId)
           : Promise.resolve([])
       ]);
 
@@ -109,6 +120,7 @@ export default function Settings() {
       setPosts(loadedPosts);
       setMembers(loadedMembers);
       setRequests(loadedRequests);
+      setReports(loadedReports);
 
       if (loadedGroup) {
         setName(loadedGroup.name || "");
@@ -270,6 +282,35 @@ export default function Settings() {
         error?.message ||
           "Could not update request."
       );
+    }
+  }
+
+  async function dismissReport(report) {
+    try {
+      await resolveNativeGroupModerationReport(
+        groupId,
+        report.id,
+        "dismissed"
+      );
+      setReports((current) => current.filter((item) => item.id !== report.id));
+      setStatus("Report dismissed.");
+    } catch (error) {
+      setStatus(error?.message || "Could not dismiss report.");
+    }
+  }
+
+  async function removeReported(report) {
+    try {
+      await removeReportedNativeGroupContent(groupId, report);
+      setReports((current) => current.filter((item) => item.id !== report.id));
+      setPosts((current) =>
+        report.contentType === "forum_post"
+          ? current.filter((item) => item.id !== report.postId)
+          : current
+      );
+      setStatus("Reported content removed.");
+    } catch (error) {
+      setStatus(error?.message || "Could not remove reported content.");
     }
   }
 
@@ -578,6 +619,68 @@ export default function Settings() {
         {canModerate && (
           <View style={styles.sectionCard}>
             <Text style={styles.sectionTitle}>
+              Reports for Review
+            </Text>
+
+            {reports.length ? (
+              reports.map((report) => {
+                const reportedName =
+                  report.reportedProfile?.displayName ||
+                  report.reportedProfile?.username ||
+                  report.reportedUserId ||
+                  "Reader";
+
+                return (
+                  <View key={report.id} style={styles.postCard}>
+                    <Text style={styles.rowTitle}>
+                      {report.title ||
+                        (report.contentType === "forum_reply"
+                          ? "Reported reply"
+                          : "Reported discussion")}
+                    </Text>
+                    <Text style={styles.postMeta}>
+                      Reported user: {reportedName}
+                    </Text>
+                    <Text style={styles.postMeta}>
+                      Reason: {report.reason || "other"}
+                    </Text>
+                    {!!report.details && (
+                      <Text style={styles.reportDetails}>
+                        {report.details}
+                      </Text>
+                    )}
+                    {!!report.body && (
+                      <Text numberOfLines={4} style={styles.reportBody}>
+                        “{report.body}”
+                      </Text>
+                    )}
+
+                    <View style={styles.rowActions}>
+                      <Pressable
+                        onPress={() => dismissReport(report)}
+                        style={styles.smallSecondary}
+                      >
+                        <Text style={styles.smallSecondaryText}>Dismiss</Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => removeReported(report)}
+                        style={styles.deleteButton}
+                      >
+                        <Text style={styles.deleteText}>Remove Content</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                );
+              })
+            ) : (
+              <Text style={styles.empty}>No open reports.</Text>
+            )}
+          </View>
+        )}
+
+        {canModerate && (
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>
               Discussion Moderation
             </Text>
 
@@ -871,6 +974,17 @@ const styles = StyleSheet.create({
   },
   empty: {
     color: BRAND.muted
+  },
+  reportDetails: {
+    color: BRAND.ink,
+    marginTop: 8,
+    lineHeight: 20
+  },
+  reportBody: {
+    color: BRAND.muted,
+    marginTop: 8,
+    fontStyle: "italic",
+    lineHeight: 20
   },
   status: {
     color: BRAND.tealDark,
