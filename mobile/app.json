@@ -9,16 +9,24 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "backgroundColor": "#F4F8F8",
+    "icon": "../public/branding/lit-chain-icon-512.png",
+    "splash": {
+      "image": "../public/branding/lit-chain-icon-512.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#F4F8F8"
+    },
     "android": {
       "package": "org.theliteraturefoundation.litchain",
-      "versionCode": 2,
+      "versionCode": 3,
       "adaptiveIcon": {
+        "foregroundImage": "../public/branding/lit-chain-icon-512.png",
         "backgroundColor": "#F4F8F8"
       }
     },
     "ios": {
       "bundleIdentifier": "org.theliteraturefoundation.litchain",
-      "supportsTablet": true
+      "supportsTablet": true,
+      "icon": "../public/branding/lit-chain-icon-512.png"
     },
     "plugins": [
       "expo-router"
