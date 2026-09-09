@@ -2229,6 +2229,8 @@ match /forumPosts/{postId} {
   && isGroupMember(groupId)
   && (
     resource.data.userId == request.auth.uid
+    || isGroupOwner(groupId)
+    || isGroupAdmin(groupId)
     || canDiscipline(
       groupId,
       resource.data.userId
@@ -2238,6 +2240,9 @@ match /forumPosts/{postId} {
    * General Class Discussion cannot be deleted while its class still
    * exists. It may only disappear in the same atomic write that
    * deletes the parent class itself.
+   *
+   * Owner/admin access above also preserves moderation of legacy
+   * forum posts that predate the current userId author field.
    */
   && (
     resource.data.get("isGeneralClassDiscussion", false) == false
