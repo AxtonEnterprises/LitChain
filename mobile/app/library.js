@@ -22,6 +22,7 @@ import { router } from "expo-router";
 
 import AppHeader from "../components/AppHeader";
 import BottomNav from "../components/BottomNav";
+import LitIcon from "../components/LitIcon";
 
 import {
   getNativeLibraryBundle
@@ -69,6 +70,8 @@ export default function LibraryScreen() {
     useState(null);
   const [friendStatus, setFriendStatus] =
     useState("");
+  const [friendSearching, setFriendSearching] =
+    useState(false);
 
   async function load() {
     try {
@@ -181,7 +184,10 @@ export default function LibraryScreen() {
 
   async function searchFriend() {
     try {
+      setFriendSearching(true);
       setFriendStatus("");
+      setFriendResult(null);
+
       const result =
         await findNativeReaderByUsername(
           friendQuery
@@ -199,6 +205,8 @@ export default function LibraryScreen() {
         error?.message ||
           "Could not search."
       );
+    } finally {
+      setFriendSearching(false);
     }
   }
 
@@ -247,6 +255,33 @@ export default function LibraryScreen() {
     ) ||
     bundle?.profile?.photoURL ||
     "";
+
+  const profileStats = [
+    {
+      id: "books",
+      icon: "read-context",
+      value: bundle?.timeline?.length || 0,
+      label: "Books"
+    },
+    {
+      id: "notes",
+      icon: "save",
+      value: bundle?.journal?.length || 0,
+      label: "Notes"
+    },
+    {
+      id: "friends",
+      icon: "reply",
+      value: bundle?.friends?.length || 0,
+      label: "Friends"
+    },
+    {
+      id: "groups",
+      icon: "groups",
+      value: bundle?.groups?.length || 0,
+      label: "Groups"
+    }
+  ];
 
   if (loading) {
     return (
@@ -393,45 +428,27 @@ export default function LibraryScreen() {
                       </Text>
                     </View>
                   </Pressable>
-
-                  {!!badges.length && (
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={
-                        false
-                      }
-                      contentContainerStyle={
-                        styles.badges
-                      }
-                    >
-                      {badges.map(
-                        (badge) => (
-                          <View
-                            key={badge.id}
-                            style={
-                              styles.badge
-                            }
-                          >
-                            <Text
-                              style={
-                                styles.badgeTitle
-                              }
-                            >
-                              {badge.label}
-                            </Text>
-
-                            <Text
-                              style={
-                                styles.badgeDetail
-                              }
-                            >
-                              {badge.detail}
-                            </Text>
-                          </View>
-                        )
-                      )}
-                    </ScrollView>
-                  )}
+                  <View style={styles.profileStats}>
+                    {profileStats.map(
+                      (stat) => (
+                        <View
+                          key={stat.id}
+                          style={styles.stat}
+                        >
+                          <LitIcon
+                            name={stat.icon}
+                            size={19}
+                          />
+                          <Text style={styles.statNumber}>
+                            {stat.value}
+                          </Text>
+                          <Text style={styles.statLabel}>
+                            {stat.label}
+                          </Text>
+                        </View>
+                      )
+                    )}
+                  </View>
                 </>
               )}
 
@@ -782,28 +799,28 @@ export default function LibraryScreen() {
 
       <Modal
         visible={friendModal}
-        transparent
-        animationType="fade"
+        animationType="slide"
         onRequestClose={() =>
           setFriendModal(false)
         }
       >
-        <Pressable
-          style={styles.overlay}
-          onPress={() =>
-            setFriendModal(false)
-          }
-        >
-          <Pressable
-            onPress={() => {}}
-            style={styles.friendPopup}
-          >
-            <Text
-              style={styles.popupTitle}
-            >
+        <SafeAreaView style={styles.friendModalPage}>
+          <View style={styles.friendModalHeader}>
+            <Text style={styles.popupTitle}>
               Find Reader
             </Text>
+            <Pressable
+              onPress={() =>
+                setFriendModal(false)
+              }
+            >
+              <Text style={styles.closeText}>
+                ×
+              </Text>
+            </Pressable>
+          </View>
 
+          <View style={styles.friendPopup}>
             <TextInput
               value={friendQuery}
               onChangeText={setFriendQuery}
@@ -829,6 +846,13 @@ export default function LibraryScreen() {
                 Search
               </Text>
             </Pressable>
+
+            {friendSearching && (
+              <ActivityIndicator
+                size="large"
+                style={{ marginTop: 24 }}
+              />
+            )}
 
             {!!friendResult && (
               <View
@@ -869,8 +893,8 @@ export default function LibraryScreen() {
                 {friendStatus}
               </Text>
             )}
-          </Pressable>
-        </Pressable>
+          </View>
+        </SafeAreaView>
       </Modal>
     </SafeAreaView>
   );
@@ -966,6 +990,34 @@ const styles = StyleSheet.create({
     marginTop: 7,
     fontWeight: "800",
     fontSize: 11
+  },
+  profileStats: {
+    flexDirection: "row",
+    gap: 6,
+    marginBottom: 12
+  },
+  stat: {
+    flex: 1,
+    minHeight: 72,
+    backgroundColor: BRAND.surface,
+    borderWidth: 1,
+    borderColor: BRAND.line,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 8
+  },
+  statNumber: {
+    color: BRAND.ink,
+    fontSize: 18,
+    fontWeight: "900",
+    marginTop: 4
+  },
+  statLabel: {
+    color: BRAND.muted,
+    fontSize: 9,
+    fontWeight: "800",
+    marginTop: 2
   },
   badges: {
     gap: 8,
@@ -1099,18 +1151,27 @@ const styles = StyleSheet.create({
   empty: {
     color: BRAND.muted
   },
-  overlay: {
+  friendModalPage: {
     flex: 1,
-    backgroundColor:
-      "rgba(0,0,0,0.35)",
-    paddingTop: 120,
-    paddingHorizontal: 20
+    backgroundColor: BRAND.background
+  },
+  friendModalHeader: {
+    minHeight: 64,
+    paddingHorizontal: 18,
+    backgroundColor: BRAND.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: BRAND.line,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between"
+  },
+  closeText: {
+    color: BRAND.ink,
+    fontSize: 30
   },
   friendPopup: {
-    backgroundColor: BRAND.surface,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: BRAND.line,
+    flex: 1,
+    backgroundColor: BRAND.background,
     padding: 18
   },
   popupTitle: {
