@@ -10,7 +10,12 @@ import { auth, db } from "../lib/firebase";
 export async function createNativeGroupDiscussion({
   groupId,
   title,
-  body
+  body,
+  sourceBookId = "",
+  sourceTitle = "",
+  sourceAuthor = "",
+  sourceParagraphIndex = null,
+  paragraphPreview = ""
 }) {
   const user = auth.currentUser;
 
@@ -60,6 +65,15 @@ export async function createNativeGroupDiscussion({
     forumUpCount: 0,
     forumDownCount: 0,
     forumScore: 0,
+    ...(sourceBookId
+      ? {
+          sourceBookId: String(sourceBookId),
+          sourceTitle: String(sourceTitle || ""),
+          sourceAuthor: String(sourceAuthor || ""),
+          sourceParagraphIndex: Math.max(Number(sourceParagraphIndex) || 0, 0),
+          paragraphPreview: String(paragraphPreview || "")
+        }
+      : {}),
     createdAtISO: now,
     updatedAtISO: now
   };

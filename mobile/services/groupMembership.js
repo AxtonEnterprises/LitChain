@@ -25,6 +25,47 @@ function activeMembership(data) {
     !["removed", "suspended"].includes(data.status);
 }
 
+async function publicProfile(userId) {
+  if (!userId) return null;
+
+  for (const collectionName of ["publicProfiles", "users"]) {
+    try {
+      const snapshot = await getDoc(
+        doc(db, collectionName, String(userId))
+      );
+
+      if (snapshot.exists()) {
+        return { id: snapshot.id, ...snapshot.data() };
+      }
+    } catch {}
+  }
+
+  return null;
+}
+
+async function hydratePerson(row) {
+  const userId = String(row?.userId || row?.id || "");
+  const profile = await publicProfile(userId);
+
+  if (!profile) return row;
+
+  return {
+    ...row,
+    displayName:
+      row.displayName ||
+      profile.displayName ||
+      profile.username ||
+      profile.name ||
+      "Reader",
+    username: row.username || profile.username || "",
+    photoURL:
+      row.photoURL ||
+      profile.photoURL ||
+      profile.avatar ||
+      ""
+  };
+}
+
 export async function getNativeDiscoverableGroups() {
   const user = requireUser();
 
@@ -113,23 +154,34 @@ export async function joinNativeGroup(group) {
   if (group.joinPolicy === "request_to_join") {
     const now = new Date().toISOString();
 
-    await setDoc(
-      doc(
-        db,
-        "groups",
-        groupId,
-        "joinRequests",
-        user.uid
-      ),
-      {
-        userId: user.uid,
-        groupId,
-        status: "pending",
-        requestedAtISO: now,
-        requestedAt: serverTimestamp()
-      },
-      { merge: true }
+    const requestRef = doc(
+      db,
+      "groups",
+      groupId,
+      "joinRequests",
+      user.uid
     );
+
+    const existing = await getDoc(requestRef);
+
+    if (existing.exists()) {
+      if (existing.data()?.status === "pending") {
+        return { status: "pending" };
+      }
+
+      // Firestore only allows the requester to CREATE a pending
+      // request. Delete an old accepted/declined request first so
+      // this is a create rather than an unauthorized update.
+      await deleteDoc(requestRef);
+    }
+
+    await setDoc(requestRef, {
+      userId: user.uid,
+      groupId,
+      status: "pending",
+      requestedAtISO: now,
+      requestedAt: serverTimestamp()
+    });
 
     return {
       status: "pending"
@@ -197,10 +249,14 @@ export async function getNativeGroupMembers(groupId) {
     )
   );
 
-  return snapshot.docs.map((item) => ({
-    id: item.id,
-    ...item.data()
-  }));
+  return Promise.all(
+    snapshot.docs.map((item) =>
+      hydratePerson({
+        id: item.id,
+        ...item.data()
+      })
+    )
+  );
 }
 
 export async function getNativeGroupJoinRequests(groupId) {
@@ -215,12 +271,14 @@ export async function getNativeGroupJoinRequests(groupId) {
     )
   );
 
-  return snapshot.docs
+  const pending = snapshot.docs
     .map((item) => ({
       id: item.id,
       ...item.data()
     }))
     .filter((item) => item.status === "pending");
+
+  return Promise.all(pending.map(hydratePerson));
 }
 
 export async function respondNativeGroupJoinRequest(

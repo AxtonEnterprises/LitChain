@@ -202,5 +202,12 @@ export async function getNativeGroupForumDisplay(
     })
   );
 
-  return normalized;
+  return normalized.sort((a, b) => {
+    const pinDelta = Number(Boolean(b.pinned)) - Number(Boolean(a.pinned));
+    if (pinDelta) return pinDelta;
+
+    const aTime = Date.parse(a.createdAtISO || "") || 0;
+    const bTime = Date.parse(b.createdAtISO || "") || 0;
+    return bTime - aTime;
+  });
 }
