@@ -77,3 +77,34 @@ export async function deleteNativeJournalEntryById(
     )
   );
 }
+
+
+export async function setNativeJournalVisibility(
+  entryId,
+  visibility
+) {
+  const user = requireUser();
+
+  const safe =
+    visibility === "public"
+      ? "public"
+      : "private";
+
+  await updateDoc(
+    doc(
+      db,
+      "users",
+      user.uid,
+      "journal",
+      String(entryId)
+    ),
+    {
+      visibility: safe,
+      groupId: null,
+      updatedAtISO:
+        new Date().toISOString()
+    }
+  );
+
+  return safe;
+}
