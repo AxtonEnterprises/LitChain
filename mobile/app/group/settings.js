@@ -1,7 +1,881 @@
-import { useEffect,useState } from "react";
-import { FlatList,Pressable,SafeAreaView,StyleSheet,Text,TextInput,View } from "react-native";
-import { router,useLocalSearchParams } from "expo-router";
-import BottomNav from "../../components/BottomNav";import { getNativeGroupForum } from "../../services/social";import { deleteNativeGroupPost,saveNativeGroupSettings } from "../../services/groupAdmin";import { BRAND } from "../../../shared/brand";
-export default function Settings(){const p=useLocalSearchParams(),id=String(p.groupId||""),role=String(p.role||"");const [name,setName]=useState(String(p.name||"")),[desc,setDesc]=useState(""),[posts,setPosts]=useState([]),[status,setStatus]=useState("");useEffect(()=>{getNativeGroupForum(id).then(setPosts);},[id]);async function save(){try{await saveNativeGroupSettings(id,{name,description:desc});setStatus("Saved.");}catch(e){setStatus(e.message||"Could not save.");}}async function del(pid){try{await deleteNativeGroupPost(id,pid);setPosts(v=>v.filter(x=>x.id!==pid));setStatus("Discussion removed.");}catch(e){setStatus(e.message||"Could not remove.");}}
-return <SafeAreaView style={s.safe}><View style={s.header}><Pressable onPress={()=>router.back()}><Text style={s.back}>‹ Back</Text></Pressable><Text style={s.title}>Settings & Moderation</Text><Text style={s.role}>{role}</Text></View><View style={s.form}><TextInput value={name} onChangeText={setName} style={s.input}/><TextInput value={desc} onChangeText={setDesc} placeholder="Description" multiline style={[s.input,{minHeight:85,textAlignVertical:"top"}]}/><Pressable onPress={save} style={s.save}><Text style={s.saveTxt}>Save group</Text></Pressable>{!!status&&<Text style={s.status}>{status}</Text>}</View><FlatList data={posts} keyExtractor={x=>x.id} contentContainerStyle={{padding:14}} ListHeaderComponent={<Text style={s.section}>Moderation</Text>} renderItem={({item})=><View style={s.post}><Text style={{flex:1,fontWeight:"800"}}>{item.title||"Discussion"}</Text><Pressable onPress={()=>del(item.id)}><Text style={s.remove}>Remove</Text></Pressable></View>}/><BottomNav active="groups"/></SafeAreaView>;}
-const s=StyleSheet.create({safe:{flex:1,backgroundColor:BRAND.background},header:{backgroundColor:BRAND.surface,padding:18,borderBottomWidth:1,borderBottomColor:BRAND.line},back:{color:BRAND.tealDark,fontWeight:"900"},title:{color:BRAND.ink,fontSize:24,fontWeight:"900",marginTop:10},role:{color:BRAND.muted,marginTop:4},form:{padding:14},input:{minHeight:46,backgroundColor:BRAND.surface,borderWidth:1,borderColor:BRAND.line,borderRadius:12,paddingHorizontal:12,marginBottom:10},save:{minHeight:46,borderRadius:12,backgroundColor:BRAND.teal,alignItems:"center",justifyContent:"center"},saveTxt:{color:"#FFF",fontWeight:"900"},status:{color:BRAND.tealDark,marginTop:8},section:{color:BRAND.ink,fontSize:20,fontWeight:"900",marginBottom:10},post:{backgroundColor:BRAND.surface,borderWidth:1,borderColor:BRAND.line,borderRadius:14,padding:14,marginBottom:8,flexDirection:"row",alignItems:"center"},remove:{color:BRAND.danger,fontWeight:"900"}});
+import {
+  useEffect,
+  useMemo,
+  useState
+} from "react";
+
+import {
+  FlatList,
+  Image,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View
+} from "react-native";
+
+import {
+  router,
+  useLocalSearchParams
+} from "expo-router";
+
+import BottomNav from "../../components/BottomNav";
+
+import {
+  getNativeGroupSettings,
+  saveNativeGroupSettings,
+  deleteNativeGroupPost,
+  setNativeGroupPostLocked,
+  setNativeGroupPostPinned
+} from "../../services/groupAdmin";
+
+import {
+  getNativeGroupForumDisplay
+} from "../../services/groupDisplay";
+
+import {
+  getNativeGroupJoinRequests,
+  getNativeGroupMembers,
+  respondNativeGroupJoinRequest,
+  updateNativeGroupMemberRole
+} from "../../services/groupMembership";
+
+import {
+  groupAvatarUrl
+} from "../../../shared/groupAvatars";
+
+import { BRAND } from "../../../shared/brand";
+
+const AVATARS = [
+  "musketeers",
+  "lost-boys",
+  "wonderland",
+  "oz",
+  "bennet-sisters",
+  "argonauts",
+  "round-table",
+  "gothic-horror",
+  "time-travelers"
+];
+
+export default function Settings() {
+  const params = useLocalSearchParams();
+
+  const groupId = String(params.groupId || "");
+  const role = String(params.role || "").toLowerCase();
+
+  const [group, setGroup] = useState(null);
+  const [name, setName] = useState(
+    String(params.name || "")
+  );
+  const [description, setDescription] =
+    useState("");
+  const [avatar, setAvatar] = useState("");
+  const [visibility, setVisibility] =
+    useState("discoverable");
+  const [joinPolicy, setJoinPolicy] =
+    useState("request_to_join");
+
+  const [posts, setPosts] = useState([]);
+  const [members, setMembers] = useState([]);
+  const [requests, setRequests] = useState([]);
+  const [status, setStatus] = useState("");
+
+  const canAdmin =
+    role === "owner" || role === "admin";
+  const canModerate =
+    canAdmin || role === "moderator";
+  const isOwner = role === "owner";
+
+  async function load() {
+    try {
+      const [
+        loadedGroup,
+        loadedPosts,
+        loadedMembers,
+        loadedRequests
+      ] = await Promise.all([
+        getNativeGroupSettings(groupId),
+        getNativeGroupForumDisplay(groupId),
+        getNativeGroupMembers(groupId),
+        canAdmin
+          ? getNativeGroupJoinRequests(groupId)
+          : Promise.resolve([])
+      ]);
+
+      setGroup(loadedGroup);
+      setPosts(loadedPosts);
+      setMembers(loadedMembers);
+      setRequests(loadedRequests);
+
+      if (loadedGroup) {
+        setName(loadedGroup.name || "");
+        setDescription(
+          loadedGroup.description || ""
+        );
+        setAvatar(loadedGroup.avatar || "");
+        setVisibility(
+          loadedGroup.visibility === "private"
+            ? "private"
+            : loadedGroup.visibility === "public"
+              ? "public"
+              : "discoverable"
+        );
+        setJoinPolicy(
+          loadedGroup.joinPolicy === "open"
+            ? "open"
+            : loadedGroup.joinPolicy ===
+                "invite_only"
+              ? "invite_only"
+              : "request_to_join"
+        );
+      }
+    } catch (error) {
+      setStatus(
+        error?.message ||
+          "Settings could not be loaded."
+      );
+    }
+  }
+
+  useEffect(() => {
+    load();
+  }, [groupId]);
+
+  async function save() {
+    try {
+      await saveNativeGroupSettings(
+        groupId,
+        {
+          name,
+          description,
+          avatar,
+          visibility,
+          joinPolicy
+        }
+      );
+
+      setStatus("Group settings saved.");
+    } catch (error) {
+      setStatus(
+        error?.message ||
+          "Could not save settings."
+      );
+    }
+  }
+
+  async function pin(post) {
+    try {
+      await setNativeGroupPostPinned(
+        groupId,
+        post.id,
+        !post.pinned
+      );
+
+      setPosts((current) =>
+        current.map((item) =>
+          item.id === post.id
+            ? {
+                ...item,
+                pinned: !post.pinned
+              }
+            : item
+        )
+      );
+    } catch (error) {
+      setStatus(
+        error?.message ||
+          "Could not update pin."
+      );
+    }
+  }
+
+  async function lock(post) {
+    try {
+      await setNativeGroupPostLocked(
+        groupId,
+        post.id,
+        !post.locked
+      );
+
+      setPosts((current) =>
+        current.map((item) =>
+          item.id === post.id
+            ? {
+                ...item,
+                locked: !post.locked
+              }
+            : item
+        )
+      );
+    } catch (error) {
+      setStatus(
+        error?.message ||
+          "Could not update lock."
+      );
+    }
+  }
+
+  async function remove(post) {
+    try {
+      await deleteNativeGroupPost(
+        groupId,
+        post.id
+      );
+
+      setPosts((current) =>
+        current.filter(
+          (item) => item.id !== post.id
+        )
+      );
+
+      setStatus("Discussion deleted.");
+    } catch (error) {
+      setStatus(
+        error?.message ||
+          "Could not delete discussion."
+      );
+    }
+  }
+
+  async function respond(request, accept) {
+    try {
+      await respondNativeGroupJoinRequest(
+        groupId,
+        request.userId || request.id,
+        accept
+      );
+
+      setRequests((current) =>
+        current.filter(
+          (item) => item.id !== request.id
+        )
+      );
+
+      setStatus(
+        accept
+          ? "Member approved."
+          : "Request declined."
+      );
+
+      if (accept) {
+        setMembers(
+          await getNativeGroupMembers(groupId)
+        );
+      }
+    } catch (error) {
+      setStatus(
+        error?.message ||
+          "Could not update request."
+      );
+    }
+  }
+
+  async function changeRole(member, nextRole) {
+    try {
+      await updateNativeGroupMemberRole(
+        groupId,
+        member.userId || member.id,
+        nextRole
+      );
+
+      setMembers((current) =>
+        current.map((item) =>
+          item.id === member.id
+            ? {
+                ...item,
+                role: nextRole
+              }
+            : item
+        )
+      );
+
+      setStatus("Role updated.");
+    } catch (error) {
+      setStatus(
+        error?.message ||
+          "Could not update role."
+      );
+    }
+  }
+
+  return (
+    <SafeAreaView style={styles.safe}>
+      <View style={styles.header}>
+        <Pressable onPress={() => router.back()}>
+          <Text style={styles.back}>‹ Back</Text>
+        </Pressable>
+
+        <Text style={styles.title}>
+          Settings & Moderation
+        </Text>
+
+        <Text style={styles.role}>
+          {role || "member"}
+        </Text>
+      </View>
+
+      <ScrollView
+        contentContainerStyle={styles.content}
+      >
+        {canAdmin && (
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>
+              Group Settings
+            </Text>
+
+            <TextInput
+              value={name}
+              onChangeText={setName}
+              placeholder="Group name"
+              style={styles.input}
+            />
+
+            <TextInput
+              value={description}
+              onChangeText={setDescription}
+              placeholder="Description"
+              multiline
+              style={[
+                styles.input,
+                styles.descriptionInput
+              ]}
+            />
+
+            <Text style={styles.label}>
+              Avatar
+            </Text>
+
+            <View style={styles.avatarGrid}>
+              {AVATARS.map((id) => (
+                <Pressable
+                  key={id}
+                  onPress={() => setAvatar(id)}
+                  style={[
+                    styles.avatarChoice,
+                    avatar === id &&
+                      styles.avatarChoiceActive
+                  ]}
+                >
+                  <Image
+                    source={{
+                      uri: groupAvatarUrl(id)
+                    }}
+                    style={styles.avatar}
+                  />
+                </Pressable>
+              ))}
+            </View>
+
+            <Text style={styles.label}>
+              Visibility
+            </Text>
+
+            <View style={styles.chips}>
+              {[
+                ["discoverable", "Discoverable"],
+                ["public", "Public"],
+                ["private", "Private"]
+              ].map(([id, label]) => (
+                <Pressable
+                  key={id}
+                  onPress={() =>
+                    setVisibility(id)
+                  }
+                  style={[
+                    styles.chip,
+                    visibility === id &&
+                      styles.chipActive
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.chipText,
+                      visibility === id &&
+                        styles.chipTextActive
+                    ]}
+                  >
+                    {label}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <Text style={styles.label}>
+              Join Policy
+            </Text>
+
+            <View style={styles.chips}>
+              {[
+                ["open", "Open"],
+                [
+                  "request_to_join",
+                  "Request"
+                ],
+                ["invite_only", "Invite"]
+              ].map(([id, label]) => (
+                <Pressable
+                  key={id}
+                  onPress={() =>
+                    setJoinPolicy(id)
+                  }
+                  style={[
+                    styles.chip,
+                    joinPolicy === id &&
+                      styles.chipActive
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.chipText,
+                      joinPolicy === id &&
+                        styles.chipTextActive
+                    ]}
+                  >
+                    {label}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <Pressable
+              onPress={save}
+              style={styles.primaryButton}
+            >
+              <Text
+                style={styles.primaryButtonText}
+              >
+                Save Group
+              </Text>
+            </Pressable>
+          </View>
+        )}
+
+        {canAdmin && (
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>
+              Join Requests
+            </Text>
+
+            {requests.length ? (
+              requests.map((request) => (
+                <View
+                  key={request.id}
+                  style={styles.rowCard}
+                >
+                  <Text style={styles.rowTitle}>
+                    {request.displayName ||
+                      request.username ||
+                      request.userId ||
+                      request.id}
+                  </Text>
+
+                  <View style={styles.rowActions}>
+                    <Pressable
+                      onPress={() =>
+                        respond(request, true)
+                      }
+                      style={styles.smallPrimary}
+                    >
+                      <Text
+                        style={
+                          styles.smallPrimaryText
+                        }
+                      >
+                        Approve
+                      </Text>
+                    </Pressable>
+
+                    <Pressable
+                      onPress={() =>
+                        respond(request, false)
+                      }
+                      style={
+                        styles.smallSecondary
+                      }
+                    >
+                      <Text
+                        style={
+                          styles.smallSecondaryText
+                        }
+                      >
+                        Decline
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ))
+            ) : (
+              <Text style={styles.empty}>
+                No pending requests.
+              </Text>
+            )}
+          </View>
+        )}
+
+        {isOwner && (
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>
+              Member Roles
+            </Text>
+
+            {members.map((member) => (
+              <View
+                key={member.id}
+                style={styles.memberCard}
+              >
+                <Text style={styles.rowTitle}>
+                  {member.displayName ||
+                    member.username ||
+                    member.userId ||
+                    member.id}
+                </Text>
+
+                <View style={styles.chips}>
+                  {[
+                    "admin",
+                    "moderator",
+                    "member"
+                  ].map((nextRole) => (
+                    <Pressable
+                      key={nextRole}
+                      disabled={
+                        member.role === "owner"
+                      }
+                      onPress={() =>
+                        changeRole(
+                          member,
+                          nextRole
+                        )
+                      }
+                      style={[
+                        styles.roleChip,
+                        member.role ===
+                          nextRole &&
+                          styles.chipActive
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.roleChipText,
+                          member.role ===
+                            nextRole &&
+                            styles.chipTextActive
+                        ]}
+                      >
+                        {nextRole}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {canModerate && (
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>
+              Discussion Moderation
+            </Text>
+
+            {posts.map((post) => (
+              <View
+                key={post.id}
+                style={styles.postCard}
+              >
+                <Text style={styles.rowTitle}>
+                  {post.title || "Discussion"}
+                </Text>
+
+                <Text style={styles.postMeta}>
+                  {post.authorName ||
+                    post.userId ||
+                    "Reader"}
+                </Text>
+
+                <View style={styles.rowActions}>
+                  <Pressable
+                    onPress={() => pin(post)}
+                    style={
+                      styles.smallSecondary
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.smallSecondaryText
+                      }
+                    >
+                      {post.pinned
+                        ? "Unpin"
+                        : "Pin"}
+                    </Text>
+                  </Pressable>
+
+                  <Pressable
+                    onPress={() => lock(post)}
+                    style={
+                      styles.smallSecondary
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.smallSecondaryText
+                      }
+                    >
+                      {post.locked
+                        ? "Unlock"
+                        : "Lock"}
+                    </Text>
+                  </Pressable>
+
+                  <Pressable
+                    onPress={() => remove(post)}
+                    style={styles.deleteButton}
+                  >
+                    <Text
+                      style={styles.deleteText}
+                    >
+                      Delete
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {!!status && (
+          <Text style={styles.status}>
+            {status}
+          </Text>
+        )}
+      </ScrollView>
+
+      <BottomNav active="groups" />
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+    backgroundColor: BRAND.background
+  },
+  header: {
+    backgroundColor: BRAND.surface,
+    padding: 18,
+    borderBottomWidth: 1,
+    borderBottomColor: BRAND.line
+  },
+  back: {
+    color: BRAND.tealDark,
+    fontWeight: "900"
+  },
+  title: {
+    color: BRAND.ink,
+    fontSize: 24,
+    fontWeight: "900",
+    marginTop: 10
+  },
+  role: {
+    color: BRAND.muted,
+    marginTop: 4,
+    textTransform: "capitalize"
+  },
+  content: {
+    padding: 14,
+    paddingBottom: 80
+  },
+  sectionCard: {
+    backgroundColor: BRAND.surface,
+    borderWidth: 1,
+    borderColor: BRAND.line,
+    borderRadius: 18,
+    padding: 16,
+    marginBottom: 14
+  },
+  sectionTitle: {
+    color: BRAND.ink,
+    fontSize: 19,
+    fontWeight: "900",
+    marginBottom: 12
+  },
+  input: {
+    minHeight: 46,
+    borderWidth: 1,
+    borderColor: BRAND.line,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    marginBottom: 10,
+    color: BRAND.ink
+  },
+  descriptionInput: {
+    minHeight: 88,
+    paddingTop: 12,
+    textAlignVertical: "top"
+  },
+  label: {
+    color: BRAND.ink,
+    fontWeight: "900",
+    fontSize: 12,
+    marginTop: 10,
+    marginBottom: 8
+  },
+  avatarGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8
+  },
+  avatarChoice: {
+    width: 68,
+    height: 68,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: "transparent",
+    overflow: "hidden"
+  },
+  avatarChoiceActive: {
+    borderColor: BRAND.teal
+  },
+  avatar: {
+    width: "100%",
+    height: "100%"
+  },
+  chips: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 7
+  },
+  chip: {
+    minHeight: 36,
+    paddingHorizontal: 11,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: BRAND.line,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  chipActive: {
+    backgroundColor: BRAND.teal,
+    borderColor: BRAND.teal
+  },
+  chipText: {
+    color: BRAND.ink,
+    fontWeight: "800",
+    fontSize: 11
+  },
+  chipTextActive: {
+    color: "#FFF"
+  },
+  primaryButton: {
+    minHeight: 46,
+    borderRadius: 12,
+    backgroundColor: BRAND.teal,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 16
+  },
+  primaryButtonText: {
+    color: "#FFF",
+    fontWeight: "900"
+  },
+  rowCard: {
+    borderTopWidth: 1,
+    borderTopColor: BRAND.line,
+    paddingVertical: 12
+  },
+  memberCard: {
+    borderTopWidth: 1,
+    borderTopColor: BRAND.line,
+    paddingVertical: 12
+  },
+  postCard: {
+    borderTopWidth: 1,
+    borderTopColor: BRAND.line,
+    paddingVertical: 12
+  },
+  rowTitle: {
+    color: BRAND.ink,
+    fontWeight: "900",
+    flex: 1
+  },
+  postMeta: {
+    color: BRAND.muted,
+    fontSize: 11,
+    marginTop: 4
+  },
+  rowActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 7,
+    marginTop: 10
+  },
+  smallPrimary: {
+    minHeight: 36,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    backgroundColor: BRAND.teal,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  smallPrimaryText: {
+    color: "#FFF",
+    fontWeight: "900",
+    fontSize: 11
+  },
+  smallSecondary: {
+    minHeight: 36,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: BRAND.line,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  smallSecondaryText: {
+    color: BRAND.tealDark,
+    fontWeight: "900",
+    fontSize: 11
+  },
+  deleteButton: {
+    minHeight: 36,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: BRAND.danger,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  deleteText: {
+    color: BRAND.danger,
+    fontWeight: "900",
+    fontSize: 11
+  },
+  roleChip: {
+    minHeight: 34,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: BRAND.line,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  roleChipText: {
+    color: BRAND.ink,
+    fontWeight: "800",
+    fontSize: 10,
+    textTransform: "capitalize"
+  },
+  empty: {
+    color: BRAND.muted
+  },
+  status: {
+    color: BRAND.tealDark,
+    textAlign: "center",
+    paddingVertical: 12,
+    fontWeight: "800"
+  }
+});
