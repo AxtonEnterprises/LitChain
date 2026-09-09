@@ -1,7 +1,9 @@
 import {
   useEffect,
+  useRef,
   useState
 } from "react";
+
 import {
   ActivityIndicator,
   FlatList,
@@ -9,19 +11,30 @@ import {
   SafeAreaView,
   StyleSheet,
   Text,
+  TextInput,
   View
 } from "react-native";
+
+import {
+  MaterialCommunityIcons
+} from "@expo/vector-icons";
+
 import {
   router,
   useLocalSearchParams
 } from "expo-router";
 
-import {
-  collection,
-  getDocs
-} from "firebase/firestore";
+import AppHeader from "../../components/AppHeader";
+import BottomNav from "../../components/BottomNav";
 
-import { db } from "../../lib/firebase";
+import {
+  getNativeGroupForumReplies,
+  getNativeGroupForumVote,
+  replyNativeGroupForumPost,
+  reportNativeGroupForumNode,
+  voteNativeGroupForumNode
+} from "../../services/groupForum";
+
 import { BRAND } from "../../../shared/brand";
 
 export default function GroupPostScreen() {
@@ -36,11 +49,41 @@ export default function GroupPostScreen() {
 
   const title =
     String(
-      params.title || "Discussion"
+      params.title ||
+      "Discussion"
     );
 
   const body =
     String(params.body || "");
+
+  const sourceBookId =
+    String(
+      params.sourceBookId ||
+      ""
+    );
+
+  const sourceTitle =
+    String(
+      params.sourceTitle ||
+      ""
+    );
+
+  const sourceAuthor =
+    String(
+      params.sourceAuthor ||
+      ""
+    );
+
+  const sourceParagraphIndex =
+    String(
+      params.sourceParagraphIndex ||
+      "0"
+    );
+
+  const postUserId =
+    String(
+      params.userId || ""
+    );
 
   const [replies, setReplies] =
     useState([]);
@@ -48,69 +91,277 @@ export default function GroupPostScreen() {
   const [loading, setLoading] =
     useState(true);
 
+  const [replyText, setReplyText] =
+    useState("");
+
+  const [status, setStatus] =
+    useState("");
+
+  const [postVote, setPostVote] =
+    useState(0);
+
+  const [postCounts, setPostCounts] =
+    useState({
+      up:
+        Number(
+          params.forumUpCount
+        ) || 0,
+      down:
+        Number(
+          params.forumDownCount
+        ) || 0,
+      score:
+        Number(
+          params.forumScore
+        ) || 0
+    });
+
+  const [replyVotes, setReplyVotes] =
+    useState({});
+
+  const viewRef =
+    useRef(null);
+
   useEffect(() => {
+    let active = true;
+
     (async () => {
       try {
-        const candidates = [
-          [
-            "groups",
+        const loadedReplies =
+          await getNativeGroupForumReplies(
             groupId,
-            "forumPosts",
-            postId,
-            "replies"
-          ],
-          [
-            "groups",
-            groupId,
-            "forumPosts",
-            postId,
-            "comments"
-          ]
-        ];
+            postId
+          );
 
-        for (const path of candidates) {
-          try {
-            const snapshot =
-              await getDocs(
-                collection(
-                  db,
-                  ...path
-                )
-              );
+        if (!active) return;
 
-            if (!snapshot.empty) {
-              setReplies(
-                snapshot.docs.map(
-                  (item) => ({
-                    id: item.id,
-                    ...item.data()
-                  })
-                )
-              );
-              break;
-            }
-          } catch {
-            // Try the next known reply collection shape.
-          }
+        setReplies(
+          loadedReplies
+        );
+
+        try {
+          setPostVote(
+            await getNativeGroupForumVote(
+              groupId,
+              {
+                targetType:
+                  "post",
+                targetId:
+                  postId
+              }
+            )
+          );
+        } catch {
+          // Optional vote state.
         }
+      } catch (error) {
+        setStatus(
+          error?.message ||
+          "Could not load replies."
+        );
       } finally {
-        setLoading(false);
+        if (active) {
+          setLoading(false);
+        }
       }
     })();
+
+    return () => {
+      active = false;
+    };
   }, [groupId, postId]);
+
+  async function addReply() {
+    try {
+      const created =
+        await replyNativeGroupForumPost(
+          groupId,
+          postId,
+          replyText
+        );
+
+      setReplies(
+        (current) => [
+          ...current,
+          created
+        ]
+      );
+
+      setReplyText("");
+      setStatus(
+        "Reply added."
+      );
+    } catch (error) {
+      setStatus(
+        error?.message ||
+          "Could not add reply."
+      );
+    }
+  }
+
+  async function votePost(direction) {
+    try {
+      const result =
+        await voteNativeGroupForumNode(
+          groupId,
+          postId,
+          { direction }
+        );
+
+      setPostVote(
+        result.direction
+      );
+
+      setPostCounts({
+        up:
+          result.forumUpCount,
+        down:
+          result.forumDownCount,
+        score:
+          result.forumScore
+      });
+    } catch (error) {
+      setStatus(
+        error?.message ||
+          "Could not update vote."
+      );
+    }
+  }
+
+  async function voteReply(
+    reply,
+    direction
+  ) {
+    try {
+      const result =
+        await voteNativeGroupForumNode(
+          groupId,
+          postId,
+          {
+            replyId:
+              reply.id,
+            direction
+          }
+        );
+
+      setReplyVotes(
+        (current) => ({
+          ...current,
+          [reply.id]:
+            result.direction
+        })
+      );
+
+      setReplies(
+        (current) =>
+          current.map(
+            (candidate) =>
+              candidate.id ===
+              reply.id
+                ? {
+                    ...candidate,
+                    forumUpCount:
+                      result.forumUpCount,
+                    forumDownCount:
+                      result.forumDownCount,
+                    forumScore:
+                      result.forumScore
+                  }
+                : candidate
+          )
+      );
+    } catch (error) {
+      setStatus(
+        error?.message ||
+          "Could not update vote."
+      );
+    }
+  }
+
+  function openSourceBook() {
+    if (!sourceBookId) return;
+
+    router.push({
+      pathname:
+        "/reader/[bookId]",
+      params: {
+        bookId:
+          sourceBookId,
+        title:
+          sourceTitle ||
+          title,
+        author:
+          sourceAuthor,
+        startParagraph:
+          sourceParagraphIndex
+      }
+    });
+  }
+
+  async function reportPost() {
+    try {
+      await reportNativeGroupForumNode({
+        groupId,
+        postId,
+        targetUserId:
+          postUserId,
+        title,
+        body,
+        reason: "other"
+      });
+
+      setStatus(
+        "Report submitted."
+      );
+    } catch (error) {
+      setStatus(
+        error?.message ||
+          "Could not submit report."
+      );
+    }
+  }
 
   return (
     <SafeAreaView style={styles.safe}>
+      <AppHeader
+        title="Group Chain"
+        subtitle={title}
+      />
+
       <View style={styles.header}>
-        <Pressable
-          onPress={() =>
-            router.back()
-          }
-        >
-          <Text style={styles.back}>
-            ‹ Back
-          </Text>
-        </Pressable>
+        <View style={styles.headerTop}>
+          <Pressable
+            onPress={() =>
+              router.back()
+            }
+          >
+            <Text style={styles.back}>
+              ‹ Back
+            </Text>
+          </Pressable>
+
+          {!!sourceBookId && (
+            <Pressable
+              onPress={openSourceBook}
+              style={styles.openBook}
+            >
+              <MaterialCommunityIcons
+                name="book-open-page-variant-outline"
+                size={18}
+                color={
+                  BRAND.tealDark
+                }
+              />
+              <Text
+                style={
+                  styles.openBookText
+                }
+              >
+                Open book
+              </Text>
+            </Pressable>
+          )}
+        </View>
 
         <Text style={styles.title}>
           {title}
@@ -119,6 +370,107 @@ export default function GroupPostScreen() {
         {!!body && (
           <Text style={styles.body}>
             {body}
+          </Text>
+        )}
+
+        <View style={styles.actions}>
+          <Pressable
+            onPress={() =>
+              votePost(1)
+            }
+            style={[
+              styles.vote,
+              postVote === 1 &&
+                styles.voteActive
+            ]}
+          >
+            <MaterialCommunityIcons
+              name="link-variant"
+              size={18}
+              color={BRAND.ink}
+            />
+            <Text style={styles.voteText}>
+              Link {postCounts.up}
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() =>
+              votePost(-1)
+            }
+            style={[
+              styles.vote,
+              postVote === -1 &&
+                styles.voteActive
+            ]}
+          >
+            <MaterialCommunityIcons
+              name="link-variant-off"
+              size={18}
+              color={BRAND.ink}
+            />
+            <Text style={styles.voteText}>
+              Unlink {postCounts.down}
+            </Text>
+          </Pressable>
+
+          {!!postUserId && (
+            <Pressable
+              onPress={reportPost}
+              style={
+                styles.iconButton
+              }
+            >
+              <MaterialCommunityIcons
+                name="flag-outline"
+                size={20}
+                color={BRAND.ink}
+              />
+            </Pressable>
+          )}
+        </View>
+
+        <Text style={styles.score}>
+          Score {postCounts.score}
+        </Text>
+
+        <TextInput
+          value={replyText}
+          onChangeText={setReplyText}
+          placeholder="Reply to this discussion..."
+          placeholderTextColor="#8B999B"
+          multiline
+          style={styles.input}
+        />
+
+        <Pressable
+          disabled={
+            !replyText.trim()
+          }
+          onPress={addReply}
+          style={[
+            styles.replyButton,
+            !replyText.trim() &&
+              styles.disabled
+          ]}
+        >
+          <MaterialCommunityIcons
+            name="reply-outline"
+            size={20}
+            color={BRAND.ink}
+          />
+          <Text
+            style={
+              styles.replyButtonText
+            }
+          >
+            Reply
+          </Text>
+        </Pressable>
+
+        {!!status && (
+          <Text style={styles.status}>
+            {status}
           </Text>
         )}
       </View>
@@ -131,6 +483,7 @@ export default function GroupPostScreen() {
         </View>
       ) : (
         <FlatList
+          ref={viewRef}
           data={replies}
           keyExtractor={(item) =>
             item.id
@@ -150,18 +503,111 @@ export default function GroupPostScreen() {
               No replies yet.
             </Text>
           }
-          renderItem={({ item }) => (
-            <View style={styles.reply}>
-              <Text style={styles.replyText}>
-                {item.body ||
-                  item.text ||
-                  item.reply ||
-                  "Reply"}
-              </Text>
-            </View>
-          )}
+          renderItem={({ item }) => {
+            const vote =
+              replyVotes[
+                item.id
+              ] || 0;
+
+            return (
+              <View style={styles.reply}>
+                <Text
+                  style={
+                    styles.replyText
+                  }
+                >
+                  {item.body ||
+                    "Reply"}
+                </Text>
+
+                <View
+                  style={
+                    styles.replyActions
+                  }
+                >
+                  <Pressable
+                    onPress={() =>
+                      voteReply(
+                        item,
+                        1
+                      )
+                    }
+                    style={[
+                      styles.smallVote,
+                      vote === 1 &&
+                        styles.voteActive
+                    ]}
+                  >
+                    <MaterialCommunityIcons
+                      name="link-variant"
+                      size={17}
+                      color={
+                        BRAND.ink
+                      }
+                    />
+                    <Text
+                      style={
+                        styles.smallVoteText
+                      }
+                    >
+                      {Number(
+                        item.forumUpCount ||
+                        0
+                      )}
+                    </Text>
+                  </Pressable>
+
+                  <Pressable
+                    onPress={() =>
+                      voteReply(
+                        item,
+                        -1
+                      )
+                    }
+                    style={[
+                      styles.smallVote,
+                      vote === -1 &&
+                        styles.voteActive
+                    ]}
+                  >
+                    <MaterialCommunityIcons
+                      name="link-variant-off"
+                      size={17}
+                      color={
+                        BRAND.ink
+                      }
+                    />
+                    <Text
+                      style={
+                        styles.smallVoteText
+                      }
+                    >
+                      {Number(
+                        item.forumDownCount ||
+                        0
+                      )}
+                    </Text>
+                  </Pressable>
+
+                  <Text
+                    style={
+                      styles.replyScore
+                    }
+                  >
+                    Score{" "}
+                    {Number(
+                      item.forumScore ||
+                      0
+                    )}
+                  </Text>
+                </View>
+              </View>
+            );
+          }}
         />
       )}
+
+      <BottomNav active="groups" />
     </SafeAreaView>
   );
 }
@@ -169,28 +615,142 @@ export default function GroupPostScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: BRAND.background
+    backgroundColor:
+      BRAND.background
   },
   header: {
-    backgroundColor: BRAND.surface,
-    padding: 18,
+    backgroundColor:
+      BRAND.surface,
+    padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: BRAND.line
+    borderBottomColor:
+      BRAND.line
+  },
+  headerTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent:
+      "space-between"
   },
   back: {
-    color: BRAND.tealDark,
+    color:
+      BRAND.tealDark,
+    fontWeight: "900"
+  },
+  openBook: {
+    minHeight: 36,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    flexDirection: "row",
+    gap: 5,
+    alignItems: "center",
+    backgroundColor:
+      "#E8F7F6"
+  },
+  openBookText: {
+    color:
+      BRAND.tealDark,
+    fontSize: 11,
     fontWeight: "900"
   },
   title: {
-    color: BRAND.ink,
-    fontSize: 24,
+    color:
+      BRAND.ink,
+    fontSize: 22,
     fontWeight: "900",
     marginTop: 12
   },
   body: {
-    color: BRAND.muted,
+    color:
+      BRAND.muted,
     lineHeight: 21,
-    marginTop: 10
+    marginTop: 8
+  },
+  actions: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 14
+  },
+  vote: {
+    minHeight: 40,
+    flexDirection: "row",
+    gap: 5,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor:
+      BRAND.line
+  },
+  voteActive: {
+    borderColor:
+      BRAND.teal,
+    backgroundColor:
+      "#E8F7F6"
+  },
+  voteText: {
+    color:
+      BRAND.ink,
+    fontSize: 11,
+    fontWeight: "900"
+  },
+  iconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor:
+      BRAND.line,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  score: {
+    color:
+      BRAND.muted,
+    fontSize: 10,
+    marginTop: 6
+  },
+  input: {
+    minHeight: 72,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor:
+      BRAND.line,
+    borderRadius: 13,
+    padding: 10,
+    textAlignVertical: "top",
+    color:
+      BRAND.ink
+  },
+  replyButton: {
+    minHeight: 44,
+    marginTop: 8,
+    backgroundColor:
+      BRAND.yellow,
+    borderRadius: 13,
+    flexDirection: "row",
+    gap: 6,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  disabled: {
+    opacity: 0.45
+  },
+  replyButtonText: {
+    color:
+      BRAND.ink,
+    fontWeight: "900"
+  },
+  status: {
+    color:
+      "#6D5A16",
+    backgroundColor:
+      "#FFF8DF",
+    padding: 8,
+    borderRadius: 10,
+    marginTop: 10,
+    fontSize: 11
   },
   center: {
     flex: 1,
@@ -198,27 +758,62 @@ const styles = StyleSheet.create({
     justifyContent: "center"
   },
   list: {
-    padding: 18
+    padding: 14
   },
   section: {
-    color: BRAND.ink,
-    fontSize: 20,
+    color:
+      BRAND.ink,
+    fontSize: 18,
     fontWeight: "900",
-    marginBottom: 12
+    marginBottom: 10
   },
   muted: {
-    color: BRAND.muted
+    color:
+      BRAND.muted
   },
   reply: {
-    backgroundColor: BRAND.surface,
+    backgroundColor:
+      BRAND.surface,
     borderWidth: 1,
-    borderColor: BRAND.line,
+    borderColor:
+      BRAND.line,
     borderRadius: 16,
-    padding: 16,
+    padding: 14,
     marginBottom: 10
   },
   replyText: {
-    color: BRAND.ink,
+    color:
+      BRAND.ink,
     lineHeight: 20
+  },
+  replyActions: {
+    flexDirection: "row",
+    gap: 7,
+    alignItems: "center",
+    marginTop: 10
+  },
+  smallVote: {
+    minWidth: 48,
+    height: 34,
+    paddingHorizontal: 7,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor:
+      BRAND.line,
+    flexDirection: "row",
+    gap: 4,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  smallVoteText: {
+    color:
+      BRAND.ink,
+    fontSize: 10,
+    fontWeight: "900"
+  },
+  replyScore: {
+    color:
+      BRAND.muted,
+    fontSize: 10
   }
 });
