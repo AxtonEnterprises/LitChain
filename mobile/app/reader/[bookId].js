@@ -608,9 +608,21 @@ export default function Reader() {
           </Text>
         </View>
 
-        <Text style={[styles.verifiedParagraph, { color: palette.muted }]}>
-          verified through ¶{verified + 1}
-        </Text>
+        <Pressable
+          onPress={() => goToParagraph(verified)}
+          accessibilityRole="button"
+          accessibilityLabel={`Go to verified paragraph ${verified + 1}`}
+          style={styles.verifiedJump}
+        >
+          <Text
+            style={[
+              styles.verifiedParagraph,
+              { color: BRAND.tealDark }
+            ]}
+          >
+            verified through ¶{verified + 1} ›
+          </Text>
+        </Pressable>
       </View>
 
       <View
@@ -1065,10 +1077,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "900"
   },
-  verifiedParagraph: {
+  verifiedJump: {
     flex: 1,
+    minHeight: 32,
+    alignItems: "flex-end",
+    justifyContent: "center"
+  },
+  verifiedParagraph: {
     textAlign: "right",
-    fontSize: 9
+    fontSize: 9,
+    fontWeight: "900"
   },
   readerViewport: {
     flex: 1,
