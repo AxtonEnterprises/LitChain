@@ -10,6 +10,7 @@ import {
   FlatList,
   Image,
   Modal,
+  PanResponder,
   Pressable,
   RefreshControl,
   SafeAreaView,
@@ -56,10 +57,17 @@ export default function HomeScreen() {
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [randomBook, setRandomBook] = useState(null);
-  const [randomLoading, setRandomLoading] = useState(false);
-  const touchStart = useRef(null);
 
-  useEffect(() => onAuthStateChanged(auth, user => { if (!user) router.replace("/login"); }), []);
+  const listRef = useRef(null);
+  const activeBookRef = useRef(null);
+
+  useEffect(
+    () =>
+      onAuthStateChanged(auth, user => {
+        if (!user) router.replace("/login");
+      }),
+    []
+  );
 
   async function load({ refresh = false } = {}) {
     try {
@@ -75,11 +83,19 @@ export default function HomeScreen() {
     }
   }
 
-  useEffect(() => { load(); }, [filter]);
+  useEffect(() => {
+    load();
+  }, [filter]);
 
   const books = useMemo(() => buildSourceBooks(entries), [entries]);
 
+  useEffect(() => {
+    activeBookRef.current = books[activeBookIndex] || books[0] || null;
+  }, [books, activeBookIndex]);
+
   function openBookChain(item) {
+    if (!item) return;
+
     router.push({
       pathname: "/chain/[bookId]",
       params: {
@@ -92,6 +108,8 @@ export default function HomeScreen() {
   }
 
   function openReader(item) {
+    if (!item) return;
+
     router.push({
       pathname: "/reader/[bookId]",
       params: {
@@ -103,6 +121,27 @@ export default function HomeScreen() {
     });
   }
 
+  const levelZeroPanResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, gesture) =>
+          gesture.dx < -18 &&
+          Math.abs(gesture.dx) >
+            Math.abs(gesture.dy) * 1.2,
+
+        onPanResponderRelease: (_, gesture) => {
+          if (
+            gesture.dx < -55 &&
+            Math.abs(gesture.dx) >
+              Math.abs(gesture.dy) * 1.2
+          ) {
+            openBookChain(activeBookRef.current);
+          }
+        }
+      }),
+    [filter]
+  );
+
   function searchBooks() {
     const term = queryText.trim().toLowerCase();
 
@@ -113,13 +152,10 @@ export default function HomeScreen() {
 
     setSearching(true);
 
-    const matches = books.filter((book) =>
-      [
-        book.title,
-        book.author
-      ]
+    const matches = books.filter(book =>
+      [book.title, book.author]
         .filter(Boolean)
-        .some((value) =>
+        .some(value =>
           String(value)
             .toLowerCase()
             .includes(term)
@@ -131,46 +167,45 @@ export default function HomeScreen() {
   }
 
   function loadRandomBook() {
-    if (!books.length) {
+    if (!books.length || !viewportHeight) {
       setRandomBook(null);
       return;
     }
 
-    setRandomLoading(true);
-
     const candidates =
       books.length > 1 && randomBook
         ? books.filter(
-            (book) =>
+            book =>
               String(book.id) !==
               String(randomBook.id)
           )
         : books;
 
-    setRandomBook(
+    const selected =
       candidates[
-        Math.floor(
-          Math.random() *
-          candidates.length
-        )
-      ] || null
+        Math.floor(Math.random() * candidates.length)
+      ] || null;
+
+    if (!selected) return;
+
+    setRandomBook(selected);
+
+    const index = books.findIndex(
+      book =>
+        String(book.id) === String(selected.id)
     );
 
-    setRandomLoading(false);
-  }
+    if (index < 0) return;
 
-  function handleTouchStart(event) {
-    const point = event.nativeEvent;
-    touchStart.current = { x: point.pageX, y: point.pageY };
-  }
+    setActiveBookIndex(index);
+    activeBookRef.current = selected;
 
-  function handleTouchEnd(event, item) {
-    if (!touchStart.current) return;
-    const point = event.nativeEvent;
-    const dx = point.pageX - touchStart.current.x;
-    const dy = point.pageY - touchStart.current.y;
-    touchStart.current = null;
-    if (dx < -65 && Math.abs(dx) > Math.abs(dy) * 1.3) openBookChain(item);
+    requestAnimationFrame(() => {
+      listRef.current?.scrollToIndex({
+        index,
+        animated: true
+      });
+    });
   }
 
   function SearchBookRow({ book }) {
@@ -178,15 +213,37 @@ export default function HomeScreen() {
       <View style={styles.searchBookRow}>
         {!!coverUrl(book) && (
           <Pressable onPress={() => openReader(book)}>
-            <Image source={{ uri: coverUrl(book) }} style={styles.searchCover} resizeMode="contain" />
+            <Image
+              source={{ uri: coverUrl(book) }}
+              style={styles.searchCover}
+              resizeMode="contain"
+            />
           </Pressable>
         )}
+
         <View style={styles.searchBookInfo}>
-          <Text style={styles.searchBookTitle}>{book.title || "Untitled"}</Text>
-          <Text style={styles.searchBookAuthor}>{authorName(book)}</Text>
+          <Text style={styles.searchBookTitle}>
+            {book.title || "Untitled"}
+          </Text>
+
+          <Text style={styles.searchBookAuthor}>
+            {authorName(book)}
+          </Text>
+
           <View style={styles.searchActions}>
-            <Pressable onPress={() => openReader(book)} style={styles.searchActionButton}><Text style={styles.searchActionText}>Read</Text></Pressable>
-            <Pressable onPress={() => openBookChain(book)} style={styles.searchActionButton}><Text style={styles.searchActionText}>Chain</Text></Pressable>
+            <Pressable
+              onPress={() => openReader(book)}
+              style={styles.searchActionButton}
+            >
+              <Text style={styles.searchActionText}>Read</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => openBookChain(book)}
+              style={styles.searchActionButton}
+            >
+              <Text style={styles.searchActionText}>Chain</Text>
+            </Pressable>
           </View>
         </View>
       </View>
@@ -195,42 +252,76 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <AppHeader title="The Chain" subtitle={`${books.length} linked ${books.length === 1 ? "book" : "books"}`} />
+      <AppHeader
+        title="The Chain"
+        subtitle={`${books.length} linked ${books.length === 1 ? "book" : "books"}`}
+      />
 
       <View style={styles.actionRow}>
-        <Pressable onPress={() => setShowSearch(true)} style={styles.actionButton}><Text style={styles.actionButtonText}>🔎 Search</Text></Pressable>
-        <Pressable onPress={loadRandomBook} style={styles.actionButton}><Text style={styles.actionButtonText}>🎲 Random</Text></Pressable>
+        <Pressable
+          onPress={() => setShowSearch(true)}
+          style={styles.actionButton}
+        >
+          <Text style={styles.actionButtonText}>🔎 Search</Text>
+        </Pressable>
+
+        <Pressable
+          onPress={loadRandomBook}
+          style={styles.actionButton}
+        >
+          <Text style={styles.actionButtonText}>🎲 Random</Text>
+        </Pressable>
       </View>
 
       <View style={styles.filters}>
         {CHAIN_FILTERS.map(item => (
-          <Pressable key={item.id} onPress={() => setFilter(item.id)} style={[styles.filter, filter === item.id && styles.filterActive]}>
-            <Text style={[styles.filterText, filter === item.id && styles.filterTextActive]}>{item.label}</Text>
+          <Pressable
+            key={item.id}
+            onPress={() => setFilter(item.id)}
+            style={[
+              styles.filter,
+              filter === item.id && styles.filterActive
+            ]}
+          >
+            <Text
+              style={[
+                styles.filterText,
+                filter === item.id &&
+                  styles.filterTextActive
+              ]}
+            >
+              {item.label}
+            </Text>
           </Pressable>
         ))}
       </View>
 
       {!!error && <Text style={styles.error}>{error}</Text>}
 
-      {randomLoading && <View style={styles.randomBanner}><ActivityIndicator /><Text style={styles.randomBannerText}>Choosing a random Chain…</Text></View>}
-      {!!randomBook && !randomLoading && (
-        <View style={styles.randomBanner}>
-          <Text numberOfLines={1} style={styles.randomBannerTitle}>{randomBook.title}</Text>
-          <View style={styles.randomBannerActions}>
-            <Pressable onPress={() => openReader(randomBook)}><Text style={styles.randomLink}>Read</Text></Pressable>
-            <Pressable onPress={() => openBookChain(randomBook)}><Text style={styles.randomLink}>Chain</Text></Pressable>
-            <Pressable onPress={loadRandomBook}><Text style={styles.randomLink}>Again</Text></Pressable>
-          </View>
+      {loading ? (
+        <View style={styles.center}>
+          <ActivityIndicator size="large" />
         </View>
-      )}
+      ) : (
+        <View
+          style={styles.feedViewport}
+          {...levelZeroPanResponder.panHandlers}
+          onLayout={event => {
+            const height = Math.floor(
+              event.nativeEvent.layout.height
+            );
 
-      {loading ? <View style={styles.center}><ActivityIndicator size="large" /></View> : (
-        <View style={styles.feedViewport} onLayout={event => {
-          const height = Math.floor(event.nativeEvent.layout.height);
-          if (height > 0 && height !== viewportHeight) setViewportHeight(height);
-        }}>
+            if (
+              height > 0 &&
+              height !== viewportHeight
+            ) {
+              setViewportHeight(height);
+            }
+          }}
+        >
           {!!viewportHeight && (
             <FlatList
+              ref={listRef}
               data={books}
               key={`chain-books-${viewportHeight}`}
               keyExtractor={item => item.id}
@@ -239,24 +330,113 @@ export default function HomeScreen() {
               snapToAlignment="start"
               decelerationRate="fast"
               disableIntervalMomentum
-              getItemLayout={(_, index) => ({ length: viewportHeight, offset: viewportHeight * index, index })}
-              onMomentumScrollEnd={event => setActiveBookIndex(Math.round(event.nativeEvent.contentOffset.y / Math.max(viewportHeight, 1)))}
-              refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load({ refresh: true })} />}
-              ListEmptyComponent={<View style={[styles.center, { height: viewportHeight }]}><Text style={styles.emptyTitle}>No Chain entries</Text><Text style={styles.emptyBody}>Nothing is available for this filter yet.</Text></View>}
+              getItemLayout={(_, index) => ({
+                length: viewportHeight,
+                offset: viewportHeight * index,
+                index
+              })}
+              onMomentumScrollEnd={event => {
+                const index = Math.round(
+                  event.nativeEvent.contentOffset.y /
+                    Math.max(viewportHeight, 1)
+                );
+
+                setActiveBookIndex(index);
+                activeBookRef.current =
+                  books[index] || null;
+              }}
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={() =>
+                    load({ refresh: true })
+                  }
+                />
+              }
+              ListEmptyComponent={
+                <View
+                  style={[
+                    styles.center,
+                    { height: viewportHeight }
+                  ]}
+                >
+                  <Text style={styles.emptyTitle}>
+                    No Chain entries
+                  </Text>
+                  <Text style={styles.emptyBody}>
+                    Nothing is available for this filter yet.
+                  </Text>
+                </View>
+              }
               renderItem={({ item }) => (
-                <View style={[styles.bookPage, { height: viewportHeight }]} onTouchStart={handleTouchStart} onTouchEnd={event => handleTouchEnd(event, item)}>
-                  <Pressable onPress={() => openReader(item)} style={styles.coverWrap}>
-                    <Image source={{ uri: gutenbergCoverUrl(item) }} resizeMode="contain" style={styles.cover} />
+                <View
+                  style={[
+                    styles.bookPage,
+                    { height: viewportHeight }
+                  ]}
+                >
+                  <Pressable
+                    onPress={() => openReader(item)}
+                    style={styles.coverWrap}
+                  >
+                    <Image
+                      source={{
+                        uri: gutenbergCoverUrl(item)
+                      }}
+                      resizeMode="contain"
+                      style={styles.cover}
+                    />
                   </Pressable>
+
                   <View style={styles.bookCard}>
-                    <Text style={styles.bookTitle}>{item.title}</Text>
-                    {!!item.author && <Text style={styles.author}>{item.author}</Text>}
-                    <Text style={styles.linkCount}>{item.linkCount} direct {item.linkCount === 1 ? "link" : "links"}</Text>
+                    <Text style={styles.bookTitle}>
+                      {item.title}
+                    </Text>
+
+                    {!!item.author && (
+                      <Text style={styles.author}>
+                        {item.author}
+                      </Text>
+                    )}
+
+                    <Text style={styles.linkCount}>
+                      {item.linkCount} direct{" "}
+                      {item.linkCount === 1
+                        ? "link"
+                        : "links"}
+                    </Text>
+
                     <View style={styles.bookActions}>
-                      <Pressable onPress={() => openReader(item)} style={styles.secondaryButton}><Text style={styles.secondaryButtonText}>Read Book</Text></Pressable>
-                      <Pressable onPress={() => openBookChain(item)} style={styles.primaryButton}><Text style={styles.primaryButtonText}>Explore Chain</Text></Pressable>
+                      <Pressable
+                        onPress={() => openReader(item)}
+                        style={styles.secondaryButton}
+                      >
+                        <Text
+                          style={
+                            styles.secondaryButtonText
+                          }
+                        >
+                          Read Book
+                        </Text>
+                      </Pressable>
+
+                      <Pressable
+                        onPress={() =>
+                          openBookChain(item)
+                        }
+                        style={styles.primaryButton}
+                      >
+                        <Text
+                          style={styles.primaryButtonText}
+                        >
+                          Explore Chain
+                        </Text>
+                      </Pressable>
                     </View>
-                    <Text style={styles.swipeHint}>Tap cover to read · swipe left to enter Chain</Text>
+
+                    <Text style={styles.swipeHint}>
+                      Tap cover to read · swipe left to enter Chain
+                    </Text>
                   </View>
                 </View>
               )}
@@ -264,8 +444,20 @@ export default function HomeScreen() {
           )}
 
           {books.length > 1 && (
-            <View pointerEvents="none" style={styles.verticalDots}>
-              {books.slice(0, 9).map((item, index) => <View key={item.id} style={[styles.dot, index === activeBookIndex && styles.dotActive]} />)}
+            <View
+              pointerEvents="none"
+              style={styles.verticalDots}
+            >
+              {books.slice(0, 9).map((item, index) => (
+                <View
+                  key={item.id}
+                  style={[
+                    styles.dot,
+                    index === activeBookIndex &&
+                      styles.dotActive
+                  ]}
+                />
+              ))}
             </View>
           )}
         </View>
@@ -273,15 +465,62 @@ export default function HomeScreen() {
 
       <BottomNav active="chain" />
 
-      <Modal visible={showSearch} animationType="slide" onRequestClose={() => setShowSearch(false)}>
+      <Modal
+        visible={showSearch}
+        animationType="slide"
+        onRequestClose={() => setShowSearch(false)}
+      >
         <SafeAreaView style={styles.modalSafe}>
-          <View style={styles.modalHeader}><Text style={styles.modalTitle}>Search Chains</Text><Pressable onPress={() => setShowSearch(false)} style={styles.closeButton}><Text style={styles.closeText}>×</Text></Pressable></View>
-          <View style={styles.searchRow}>
-            <TextInput value={queryText} onChangeText={setQueryText} onSubmitEditing={searchBooks} placeholder="Search linked title or author" placeholderTextColor="#8B999B" style={styles.searchInput} />
-            <Pressable onPress={searchBooks} style={styles.searchButton}><Text style={styles.searchButtonText}>Search</Text></Pressable>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>
+              Search Chains
+            </Text>
+            <Pressable
+              onPress={() => setShowSearch(false)}
+              style={styles.closeButton}
+            >
+              <Text style={styles.closeText}>×</Text>
+            </Pressable>
           </View>
-          {searching ? <View style={styles.center}><ActivityIndicator size="large" /></View> : (
-            <FlatList data={searchResults} keyExtractor={book => String(book.id)} contentContainerStyle={styles.searchList} ListEmptyComponent={<Text style={styles.searchEmpty}>Search books that already have Chain entries.</Text>} renderItem={({ item }) => <SearchBookRow book={item} />} />
+
+          <View style={styles.searchRow}>
+            <TextInput
+              value={queryText}
+              onChangeText={setQueryText}
+              onSubmitEditing={searchBooks}
+              placeholder="Search linked title or author"
+              placeholderTextColor="#8B999B"
+              style={styles.searchInput}
+            />
+
+            <Pressable
+              onPress={searchBooks}
+              style={styles.searchButton}
+            >
+              <Text style={styles.searchButtonText}>
+                Search
+              </Text>
+            </Pressable>
+          </View>
+
+          {searching ? (
+            <View style={styles.center}>
+              <ActivityIndicator size="large" />
+            </View>
+          ) : (
+            <FlatList
+              data={searchResults}
+              keyExtractor={book => String(book.id)}
+              contentContainerStyle={styles.searchList}
+              ListEmptyComponent={
+                <Text style={styles.searchEmpty}>
+                  Search books that already have Chain entries.
+                </Text>
+              }
+              renderItem={({ item }) => (
+                <SearchBookRow book={item} />
+              )}
+            />
           )}
         </SafeAreaView>
       </Modal>
@@ -301,11 +540,6 @@ const styles = StyleSheet.create({
   filterTextActive: { color: "#FFFFFF" },
   center: { flex: 1, alignItems: "center", justifyContent: "center", padding: 28 },
   error: { color: BRAND.danger, textAlign: "center", padding: 8 },
-  randomBanner: { minHeight: 48, paddingHorizontal: 16, backgroundColor: "#FFF8DF", borderBottomWidth: 1, borderBottomColor: BRAND.line, flexDirection: "row", alignItems: "center", gap: 10 },
-  randomBannerText: { color: BRAND.muted },
-  randomBannerTitle: { flex: 1, color: BRAND.ink, fontWeight: "900" },
-  randomBannerActions: { flexDirection: "row", gap: 12 },
-  randomLink: { color: BRAND.tealDark, fontWeight: "900" },
   feedViewport: { flex: 1, position: "relative" },
   emptyTitle: { color: BRAND.ink, fontSize: 22, fontWeight: "900" },
   emptyBody: { color: BRAND.muted, marginTop: 8, textAlign: "center" },
