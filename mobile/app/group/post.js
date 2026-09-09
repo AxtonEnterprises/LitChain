@@ -16,10 +16,6 @@ import {
 } from "react-native";
 
 import {
-  MaterialCommunityIcons
-} from "@expo/vector-icons";
-
-import {
   router,
   useLocalSearchParams
 } from "expo-router";
@@ -38,89 +34,30 @@ import {
 import { BRAND } from "../../../shared/brand";
 
 export default function GroupPostScreen() {
-  const params =
-    useLocalSearchParams();
+  const params = useLocalSearchParams();
 
-  const groupId =
-    String(params.groupId || "");
+  const groupId = String(params.groupId || "");
+  const postId = String(params.postId || "");
+  const title = String(params.title || "Discussion");
+  const body = String(params.body || "");
+  const sourceBookId = String(params.sourceBookId || "");
+  const sourceTitle = String(params.sourceTitle || "");
+  const sourceAuthor = String(params.sourceAuthor || "");
+  const sourceParagraphIndex = String(params.sourceParagraphIndex || "0");
+  const postUserId = String(params.userId || "");
 
-  const postId =
-    String(params.postId || "");
-
-  const title =
-    String(
-      params.title ||
-      "Discussion"
-    );
-
-  const body =
-    String(params.body || "");
-
-  const sourceBookId =
-    String(
-      params.sourceBookId ||
-      ""
-    );
-
-  const sourceTitle =
-    String(
-      params.sourceTitle ||
-      ""
-    );
-
-  const sourceAuthor =
-    String(
-      params.sourceAuthor ||
-      ""
-    );
-
-  const sourceParagraphIndex =
-    String(
-      params.sourceParagraphIndex ||
-      "0"
-    );
-
-  const postUserId =
-    String(
-      params.userId || ""
-    );
-
-  const [replies, setReplies] =
-    useState([]);
-
-  const [loading, setLoading] =
-    useState(true);
-
-  const [replyText, setReplyText] =
-    useState("");
-
-  const [status, setStatus] =
-    useState("");
-
-  const [postVote, setPostVote] =
-    useState(0);
-
-  const [postCounts, setPostCounts] =
-    useState({
-      up:
-        Number(
-          params.forumUpCount
-        ) || 0,
-      down:
-        Number(
-          params.forumDownCount
-        ) || 0,
-      score:
-        Number(
-          params.forumScore
-        ) || 0
-    });
-
-  const [replyVotes, setReplyVotes] =
-    useState({});
-
-  const viewRef =
-    useRef(null);
+  const [replies, setReplies] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [replyText, setReplyText] = useState("");
+  const [status, setStatus] = useState("");
+  const [postVote, setPostVote] = useState(0);
+  const [postCounts, setPostCounts] = useState({
+    up: Number(params.forumUpCount) || 0,
+    down: Number(params.forumDownCount) || 0,
+    score: Number(params.forumScore) || 0
+  });
+  const [replyVotes, setReplyVotes] = useState({});
+  const viewRef = useRef(null);
 
   useEffect(() => {
     let active = true;
@@ -128,41 +65,26 @@ export default function GroupPostScreen() {
     (async () => {
       try {
         const loadedReplies =
-          await getNativeGroupForumReplies(
-            groupId,
-            postId
-          );
+          await getNativeGroupForumReplies(groupId, postId);
 
         if (!active) return;
 
-        setReplies(
-          loadedReplies
-        );
+        setReplies(loadedReplies);
 
         try {
           setPostVote(
-            await getNativeGroupForumVote(
-              groupId,
-              {
-                targetType:
-                  "post",
-                targetId:
-                  postId
-              }
-            )
+            await getNativeGroupForumVote(groupId, {
+              targetType: "post",
+              targetId: postId
+            })
           );
         } catch {
-          // Optional vote state.
+          // Vote state is optional.
         }
       } catch (error) {
-        setStatus(
-          error?.message ||
-          "Could not load replies."
-        );
+        setStatus(error?.message || "Could not load replies.");
       } finally {
-        if (active) {
-          setLoading(false);
-        }
+        if (active) setLoading(false);
       }
     })();
 
@@ -180,22 +102,11 @@ export default function GroupPostScreen() {
           replyText
         );
 
-      setReplies(
-        (current) => [
-          ...current,
-          created
-        ]
-      );
-
+      setReplies((current) => [...current, created]);
       setReplyText("");
-      setStatus(
-        "Reply added."
-      );
+      setStatus("Reply added.");
     } catch (error) {
-      setStatus(
-        error?.message ||
-          "Could not add reply."
-      );
+      setStatus(error?.message || "Could not add reply.");
     }
   }
 
@@ -208,73 +119,48 @@ export default function GroupPostScreen() {
           { direction }
         );
 
-      setPostVote(
-        result.direction
-      );
-
+      setPostVote(result.direction);
       setPostCounts({
-        up:
-          result.forumUpCount,
-        down:
-          result.forumDownCount,
-        score:
-          result.forumScore
+        up: result.forumUpCount,
+        down: result.forumDownCount,
+        score: result.forumScore
       });
     } catch (error) {
-      setStatus(
-        error?.message ||
-          "Could not update vote."
-      );
+      setStatus(error?.message || "Could not update vote.");
     }
   }
 
-  async function voteReply(
-    reply,
-    direction
-  ) {
+  async function voteReply(reply, direction) {
     try {
       const result =
         await voteNativeGroupForumNode(
           groupId,
           postId,
           {
-            replyId:
-              reply.id,
+            replyId: reply.id,
             direction
           }
         );
 
-      setReplyVotes(
-        (current) => ({
-          ...current,
-          [reply.id]:
-            result.direction
-        })
-      );
+      setReplyVotes((current) => ({
+        ...current,
+        [reply.id]: result.direction
+      }));
 
-      setReplies(
-        (current) =>
-          current.map(
-            (candidate) =>
-              candidate.id ===
-              reply.id
-                ? {
-                    ...candidate,
-                    forumUpCount:
-                      result.forumUpCount,
-                    forumDownCount:
-                      result.forumDownCount,
-                    forumScore:
-                      result.forumScore
-                  }
-                : candidate
-          )
+      setReplies((current) =>
+        current.map((candidate) =>
+          candidate.id === reply.id
+            ? {
+                ...candidate,
+                forumUpCount: result.forumUpCount,
+                forumDownCount: result.forumDownCount,
+                forumScore: result.forumScore
+              }
+            : candidate
+        )
       );
     } catch (error) {
-      setStatus(
-        error?.message ||
-          "Could not update vote."
-      );
+      setStatus(error?.message || "Could not update vote.");
     }
   }
 
@@ -282,18 +168,12 @@ export default function GroupPostScreen() {
     if (!sourceBookId) return;
 
     router.push({
-      pathname:
-        "/reader/[bookId]",
+      pathname: "/reader/[bookId]",
       params: {
-        bookId:
-          sourceBookId,
-        title:
-          sourceTitle ||
-          title,
-        author:
-          sourceAuthor,
-        startParagraph:
-          sourceParagraphIndex
+        bookId: sourceBookId,
+        title: sourceTitle || title,
+        author: sourceAuthor,
+        startParagraph: sourceParagraphIndex
       }
     });
   }
@@ -303,136 +183,73 @@ export default function GroupPostScreen() {
       await reportNativeGroupForumNode({
         groupId,
         postId,
-        targetUserId:
-          postUserId,
+        targetUserId: postUserId,
         title,
         body,
         reason: "other"
       });
 
-      setStatus(
-        "Report submitted."
-      );
+      setStatus("Report submitted.");
     } catch (error) {
-      setStatus(
-        error?.message ||
-          "Could not submit report."
-      );
+      setStatus(error?.message || "Could not submit report.");
     }
   }
 
   return (
     <SafeAreaView style={styles.safe}>
-      <AppHeader
-        title="Group Chain"
-        subtitle={title}
-      />
+      <AppHeader title="Group Chain" subtitle={title} />
 
       <View style={styles.header}>
         <View style={styles.headerTop}>
-          <Pressable
-            onPress={() =>
-              router.back()
-            }
-          >
-            <Text style={styles.back}>
-              ‹ Back
-            </Text>
+          <Pressable onPress={() => router.back()}>
+            <Text style={styles.back}>‹ Back</Text>
           </Pressable>
 
           {!!sourceBookId && (
-            <Pressable
-              onPress={openSourceBook}
-              style={styles.openBook}
-            >
-              <MaterialCommunityIcons
-                name="book-open-page-variant-outline"
-                size={18}
-                color={
-                  BRAND.tealDark
-                }
-              />
-              <Text
-                style={
-                  styles.openBookText
-                }
-              >
-                Open book
-              </Text>
+            <Pressable onPress={openSourceBook} style={styles.openBook}>
+              <Text style={styles.openBookGlyph}>▤</Text>
+              <Text style={styles.openBookText}>Open book</Text>
             </Pressable>
           )}
         </View>
 
-        <Text style={styles.title}>
-          {title}
-        </Text>
+        <Text style={styles.title}>{title}</Text>
 
         {!!body && (
-          <Text style={styles.body}>
-            {body}
-          </Text>
+          <Text style={styles.body}>{body}</Text>
         )}
 
         <View style={styles.actions}>
           <Pressable
-            onPress={() =>
-              votePost(1)
-            }
+            onPress={() => votePost(1)}
             style={[
               styles.vote,
-              postVote === 1 &&
-                styles.voteActive
+              postVote === 1 && styles.voteActive
             ]}
           >
-            <MaterialCommunityIcons
-              name="link-variant"
-              size={18}
-              color={BRAND.ink}
-            />
-            <Text style={styles.voteText}>
-              Link {postCounts.up}
-            </Text>
+            <Text style={styles.voteGlyph}>∞</Text>
+            <Text style={styles.voteText}>Link {postCounts.up}</Text>
           </Pressable>
 
           <Pressable
-            onPress={() =>
-              votePost(-1)
-            }
+            onPress={() => votePost(-1)}
             style={[
               styles.vote,
-              postVote === -1 &&
-                styles.voteActive
+              postVote === -1 && styles.voteActive
             ]}
           >
-            <MaterialCommunityIcons
-              name="link-variant-off"
-              size={18}
-              color={BRAND.ink}
-            />
-            <Text style={styles.voteText}>
-              Unlink {postCounts.down}
-            </Text>
+            <Text style={styles.voteGlyph}>×</Text>
+            <Text style={styles.voteText}>Unlink {postCounts.down}</Text>
           </Pressable>
 
           {!!postUserId && (
-            <Pressable
-              onPress={reportPost}
-              style={
-                styles.iconButton
-              }
-            >
-              <MaterialCommunityIcons
-                name="flag-outline"
-                size={20}
-                color={BRAND.ink}
-              />
+            <Pressable onPress={reportPost} style={styles.iconButton}>
+              <Text style={styles.reportGlyph}>!</Text>
             </Pressable>
           )}
         </View>
 
-        <Text style={styles.score}>
-          Score {postCounts.score}
-        </Text>
+        <Text style={styles.score}>Score {postCounts.score}</Text>
 
         <TextInput
           value={replyText}
@@ -444,161 +261,76 @@ export default function GroupPostScreen() {
         />
 
         <Pressable
-          disabled={
-            !replyText.trim()
-          }
+          disabled={!replyText.trim()}
           onPress={addReply}
           style={[
             styles.replyButton,
-            !replyText.trim() &&
-              styles.disabled
+            !replyText.trim() && styles.disabled
           ]}
         >
-          <MaterialCommunityIcons
-            name="reply-outline"
-            size={20}
-            color={BRAND.ink}
-          />
-          <Text
-            style={
-              styles.replyButtonText
-            }
-          >
-            Reply
-          </Text>
+          <Text style={styles.replyGlyph}>↩</Text>
+          <Text style={styles.replyButtonText}>Reply</Text>
         </Pressable>
 
         {!!status && (
-          <Text style={styles.status}>
-            {status}
-          </Text>
+          <Text style={styles.status}>{status}</Text>
         )}
       </View>
 
       {loading ? (
         <View style={styles.center}>
-          <ActivityIndicator
-            size="large"
-          />
+          <ActivityIndicator size="large" />
         </View>
       ) : (
         <FlatList
           ref={viewRef}
           data={replies}
-          keyExtractor={(item) =>
-            item.id
-          }
-          contentContainerStyle={
-            styles.list
-          }
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.list}
           ListHeaderComponent={
-            <Text
-              style={styles.section}
-            >
-              Replies
-            </Text>
+            <Text style={styles.section}>Replies</Text>
           }
           ListEmptyComponent={
-            <Text style={styles.muted}>
-              No replies yet.
-            </Text>
+            <Text style={styles.muted}>No replies yet.</Text>
           }
           renderItem={({ item }) => {
-            const vote =
-              replyVotes[
-                item.id
-              ] || 0;
+            const vote = replyVotes[item.id] || 0;
 
             return (
               <View style={styles.reply}>
-                <Text
-                  style={
-                    styles.replyText
-                  }
-                >
-                  {item.body ||
-                    "Reply"}
+                <Text style={styles.replyText}>
+                  {item.body || "Reply"}
                 </Text>
 
-                <View
-                  style={
-                    styles.replyActions
-                  }
-                >
+                <View style={styles.replyActions}>
                   <Pressable
-                    onPress={() =>
-                      voteReply(
-                        item,
-                        1
-                      )
-                    }
+                    onPress={() => voteReply(item, 1)}
                     style={[
                       styles.smallVote,
-                      vote === 1 &&
-                        styles.voteActive
+                      vote === 1 && styles.voteActive
                     ]}
                   >
-                    <MaterialCommunityIcons
-                      name="link-variant"
-                      size={17}
-                      color={
-                        BRAND.ink
-                      }
-                    />
-                    <Text
-                      style={
-                        styles.smallVoteText
-                      }
-                    >
-                      {Number(
-                        item.forumUpCount ||
-                        0
-                      )}
+                    <Text style={styles.smallGlyph}>∞</Text>
+                    <Text style={styles.smallVoteText}>
+                      {Number(item.forumUpCount || 0)}
                     </Text>
                   </Pressable>
 
                   <Pressable
-                    onPress={() =>
-                      voteReply(
-                        item,
-                        -1
-                      )
-                    }
+                    onPress={() => voteReply(item, -1)}
                     style={[
                       styles.smallVote,
-                      vote === -1 &&
-                        styles.voteActive
+                      vote === -1 && styles.voteActive
                     ]}
                   >
-                    <MaterialCommunityIcons
-                      name="link-variant-off"
-                      size={17}
-                      color={
-                        BRAND.ink
-                      }
-                    />
-                    <Text
-                      style={
-                        styles.smallVoteText
-                      }
-                    >
-                      {Number(
-                        item.forumDownCount ||
-                        0
-                      )}
+                    <Text style={styles.smallGlyph}>×</Text>
+                    <Text style={styles.smallVoteText}>
+                      {Number(item.forumDownCount || 0)}
                     </Text>
                   </Pressable>
 
-                  <Text
-                    style={
-                      styles.replyScore
-                    }
-                  >
-                    Score{" "}
-                    {Number(
-                      item.forumScore ||
-                      0
-                    )}
+                  <Text style={styles.replyScore}>
+                    Score {Number(item.forumScore || 0)}
                   </Text>
                 </View>
               </View>
@@ -615,26 +347,21 @@ export default function GroupPostScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor:
-      BRAND.background
+    backgroundColor: BRAND.background
   },
   header: {
-    backgroundColor:
-      BRAND.surface,
+    backgroundColor: BRAND.surface,
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor:
-      BRAND.line
+    borderBottomColor: BRAND.line
   },
   headerTop: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent:
-      "space-between"
+    justifyContent: "space-between"
   },
   back: {
-    color:
-      BRAND.tealDark,
+    color: BRAND.tealDark,
     fontWeight: "900"
   },
   openBook: {
@@ -644,25 +371,26 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 5,
     alignItems: "center",
-    backgroundColor:
-      "#E8F7F6"
+    backgroundColor: "#E8F7F6"
+  },
+  openBookGlyph: {
+    color: BRAND.tealDark,
+    fontSize: 17,
+    fontWeight: "900"
   },
   openBookText: {
-    color:
-      BRAND.tealDark,
+    color: BRAND.tealDark,
     fontSize: 11,
     fontWeight: "900"
   },
   title: {
-    color:
-      BRAND.ink,
+    color: BRAND.ink,
     fontSize: 22,
     fontWeight: "900",
     marginTop: 12
   },
   body: {
-    color:
-      BRAND.muted,
+    color: BRAND.muted,
     lineHeight: 21,
     marginTop: 8
   },
@@ -680,18 +408,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor:
-      BRAND.line
+    borderColor: BRAND.line
   },
   voteActive: {
-    borderColor:
-      BRAND.teal,
-    backgroundColor:
-      "#E8F7F6"
+    borderColor: BRAND.teal,
+    backgroundColor: "#E8F7F6"
+  },
+  voteGlyph: {
+    color: BRAND.ink,
+    fontSize: 17,
+    fontWeight: "900"
   },
   voteText: {
-    color:
-      BRAND.ink,
+    color: BRAND.ink,
     fontSize: 11,
     fontWeight: "900"
   },
@@ -700,14 +429,17 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor:
-      BRAND.line,
+    borderColor: BRAND.line,
     alignItems: "center",
     justifyContent: "center"
   },
+  reportGlyph: {
+    color: BRAND.ink,
+    fontSize: 18,
+    fontWeight: "900"
+  },
   score: {
-    color:
-      BRAND.muted,
+    color: BRAND.muted,
     fontSize: 10,
     marginTop: 6
   },
@@ -715,19 +447,16 @@ const styles = StyleSheet.create({
     minHeight: 72,
     marginTop: 12,
     borderWidth: 1,
-    borderColor:
-      BRAND.line,
+    borderColor: BRAND.line,
     borderRadius: 13,
     padding: 10,
     textAlignVertical: "top",
-    color:
-      BRAND.ink
+    color: BRAND.ink
   },
   replyButton: {
     minHeight: 44,
     marginTop: 8,
-    backgroundColor:
-      BRAND.yellow,
+    backgroundColor: BRAND.yellow,
     borderRadius: 13,
     flexDirection: "row",
     gap: 6,
@@ -737,16 +466,18 @@ const styles = StyleSheet.create({
   disabled: {
     opacity: 0.45
   },
+  replyGlyph: {
+    color: BRAND.ink,
+    fontSize: 18,
+    fontWeight: "900"
+  },
   replyButtonText: {
-    color:
-      BRAND.ink,
+    color: BRAND.ink,
     fontWeight: "900"
   },
   status: {
-    color:
-      "#6D5A16",
-    backgroundColor:
-      "#FFF8DF",
+    color: "#6D5A16",
+    backgroundColor: "#FFF8DF",
     padding: 8,
     borderRadius: 10,
     marginTop: 10,
@@ -761,29 +492,24 @@ const styles = StyleSheet.create({
     padding: 14
   },
   section: {
-    color:
-      BRAND.ink,
+    color: BRAND.ink,
     fontSize: 18,
     fontWeight: "900",
     marginBottom: 10
   },
   muted: {
-    color:
-      BRAND.muted
+    color: BRAND.muted
   },
   reply: {
-    backgroundColor:
-      BRAND.surface,
+    backgroundColor: BRAND.surface,
     borderWidth: 1,
-    borderColor:
-      BRAND.line,
+    borderColor: BRAND.line,
     borderRadius: 16,
     padding: 14,
     marginBottom: 10
   },
   replyText: {
-    color:
-      BRAND.ink,
+    color: BRAND.ink,
     lineHeight: 20
   },
   replyActions: {
@@ -798,22 +524,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 7,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor:
-      BRAND.line,
+    borderColor: BRAND.line,
     flexDirection: "row",
     gap: 4,
     alignItems: "center",
     justifyContent: "center"
   },
+  smallGlyph: {
+    color: BRAND.ink,
+    fontWeight: "900"
+  },
   smallVoteText: {
-    color:
-      BRAND.ink,
+    color: BRAND.ink,
     fontSize: 10,
     fontWeight: "900"
   },
   replyScore: {
-    color:
-      BRAND.muted,
+    color: BRAND.muted,
     fontSize: 10
   }
 });
