@@ -4,11 +4,15 @@ import {
   View
 } from "react-native";
 
+import { BRAND } from "../../shared/brand";
+
 export default function BrandMark() {
   return (
     <View style={styles.wrap}>
       <Image
-        source={require("../../public/branding/lit-chain-logo-horizontal.png")}
+        source={{
+          uri: BRAND.logoHorizontal
+        }}
         resizeMode="contain"
         style={styles.logo}
       />
