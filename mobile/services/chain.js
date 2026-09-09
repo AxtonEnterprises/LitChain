@@ -1,424 +1,65 @@
 import {
-  collectionGroup,
-  doc,
-  getDoc,
-  getDocs,
-  query,
-  runTransaction,
-  serverTimestamp,
-  where
+  collectionGroup, doc, getDoc, getDocs, query, where
 } from "firebase/firestore";
-
 import { auth, db } from "../lib/firebase";
-import {
-  getNativeFriends,
-  getNativeGroups
-} from "./social";
+import { getNativeFriends, getNativeGroups } from "./social";
+import { voteOnChainEntry } from "./chainVoting";
+export { voteOnChainEntry };
 
 export {
-  buildSourceBooks,
-  chainDownCount,
-  chainEntryKey,
-  chainUpCount,
-  chainVoteScore,
-  getDirectBookEntries,
-  getPublicBranches,
-  gutenbergCoverUrl,
-  sortChainEntriesByVote
+  buildSourceBooks, chainDownCount, chainEntryKey, chainUpCount, chainVoteScore,
+  getDirectBookEntries, getPublicBranches, gutenbergCoverUrl, sortChainEntriesByVote
 } from "../../shared/chainCore";
-
-import {
-  chainEntryKey
-} from "../../shared/chainCore";
+import { chainEntryKey } from "../../shared/chainCore";
 
 function normalize(entryDoc) {
   const data = entryDoc.data();
-
-  return {
-    id: entryDoc.id,
-    ...data,
-    visibility:
-      ["private", "public", "group"].includes(
-        data?.visibility
-      )
-        ? data.visibility
-        : "private",
-    groupId: data?.groupId || null,
-    updatedAtISO: data?.updatedAtISO || null
-  };
+  return { id: entryDoc.id, ...data, visibility: ["private","public","group"].includes(data?.visibility) ? data.visibility : "private", groupId: data?.groupId || null, updatedAtISO: data?.updatedAtISO || null };
 }
 
 async function publicFeed() {
-  const snapshot = await getDocs(
-    query(
-      collectionGroup(db, "journal"),
-      where("visibility", "==", "public")
-    )
-  );
-
-  return snapshot.docs
-    .map(normalize)
-    .filter(Boolean)
-    .sort((a, b) =>
-      String(
-        b.updatedAtISO ||
-        b.createdAt ||
-        ""
-      ).localeCompare(
-        String(
-          a.updatedAtISO ||
-          a.createdAt ||
-          ""
-        )
-      )
-    );
+  const snapshot = await getDocs(query(collectionGroup(db, "journal"), where("visibility", "==", "public")));
+  return snapshot.docs.map(normalize).filter(Boolean).sort((a,b)=>String(b.updatedAtISO||b.createdAt||"").localeCompare(String(a.updatedAtISO||a.createdAt||"")));
 }
 
-export async function getChainFeedByFilter(
-  filter = "all"
-) {
+export async function getChainFeedByFilter(filter="all") {
   if (filter === "groups") {
-    const bundle =
-      await getNativeGroups();
-
-    const groups = [
-      ...bundle.mine,
-      ...bundle.classes
-    ];
-
+    const bundle = await getNativeGroups();
+    const groups = [...bundle.mine, ...bundle.classes];
     if (!groups.length) return [];
-
-    const result = [];
-
-    await Promise.all(
-      groups.map(async (group) => {
-        try {
-          const snapshot = await getDocs(
-            query(
-              collectionGroup(db, "journal"),
-              where(
-                "groupId",
-                "==",
-                String(group.id)
-              ),
-              where(
-                "visibility",
-                "==",
-                "group"
-              )
-            )
-          );
-
-          for (const item of snapshot.docs) {
-            result.push({
-              ...normalize(item),
-              group: {
-                id: group.id,
-                name:
-                  group.name ||
-                  "Reading Group"
-              }
-            });
-          }
-        } catch (error) {
-          console.warn(
-            `Could not load Chain group ${group.id}:`,
-            error?.code || error
-          );
-        }
-      })
-    );
-
-    return result.sort((a, b) =>
-      String(
-        b.updatedAtISO ||
-        b.createdAt ||
-        ""
-      ).localeCompare(
-        String(
-          a.updatedAtISO ||
-          a.createdAt ||
-          ""
-        )
-      )
-    );
-  }
-
-  const feed = await publicFeed();
-
-  if (filter !== "friends") {
-    return feed;
-  }
-
-  const friends =
-    await getNativeFriends();
-
-  const ids = new Set(
-    friends
-      .map(
-        (friend) =>
-          friend.otherUserId ||
-          friend.userId ||
-          friend.uid
-      )
-      .filter(Boolean)
-      .map(String)
-  );
-
-  return feed.filter((entry) =>
-    ids.has(String(entry.userId || ""))
-  );
-}
-
-export async function getPublicChainFeed() {
-  return getChainFeedByFilter("all");
-}
-
-function voteDocumentId(entry, voterUserId) {
-  return [
-    entry?.userId || "",
-    entry?.id || "",
-    voterUserId || ""
-  ].join("_");
-}
-
-export async function getMyChainVotes(entries = []) {
-  const user = auth.currentUser;
-  if (!user || !entries.length) return {};
-
-  const result = {};
-
-  await Promise.all(
-    entries.map(async (entry) => {
-      if (!entry?.id || !entry?.userId) {
-        return;
-      }
-
+    const result=[];
+    await Promise.all(groups.map(async group => {
       try {
-        const snapshot = await getDoc(
-          doc(
-            db,
-            "chainVotes",
-            voteDocumentId(
-              entry,
-              user.uid
-            )
-          )
-        );
-
-        if (snapshot.exists()) {
-          const direction = Number(
-            snapshot.data()?.direction
-          );
-
-          if (
-            direction === 1 ||
-            direction === -1
-          ) {
-            result[
-              chainEntryKey(entry)
-            ] = direction;
-          }
-        }
-      } catch (error) {
-        console.warn(
-          "Could not load Chain vote:",
-          error
-        );
-      }
-    })
-  );
-
-  return result;
+        const snapshot = await getDocs(query(collectionGroup(db,"journal"),where("groupId","==",String(group.id)),where("visibility","==","group")));
+        for (const item of snapshot.docs) result.push({...normalize(item),group:{id:group.id,name:group.name||"Reading Group"}});
+      } catch (error) { console.warn(`Could not load Chain group ${group.id}:`, error?.code || error); }
+    }));
+    return result.sort((a,b)=>String(b.updatedAtISO||b.createdAt||"").localeCompare(String(a.updatedAtISO||a.createdAt||"")));
+  }
+  const feed = await publicFeed();
+  if (filter !== "friends") return feed;
+  const friends = await getNativeFriends();
+  const ids = new Set(friends.map(f=>f.otherUserId||f.userId||f.uid).filter(Boolean).map(String));
+  return feed.filter(entry=>ids.has(String(entry.userId||"")));
 }
 
-export async function voteOnChainEntry(
-  entry,
-  requestedDirection
-) {
-  const user = auth.currentUser;
+export async function getPublicChainFeed(){ return getChainFeedByFilter("all"); }
 
-  if (!user) {
-    throw new Error(
-      "You must be logged in."
-    );
-  }
+function voteDocumentId(entry,voterUserId){ return [entry?.userId||"",entry?.id||"",voterUserId||""].join("_"); }
 
-  const direction =
-    Number(requestedDirection);
-
-  if (
-    direction !== 1 &&
-    direction !== -1
-  ) {
-    throw new Error(
-      "Invalid Chain vote."
-    );
-  }
-
-  const entryRef = doc(
-    db,
-    "users",
-    String(entry.userId),
-    "journal",
-    String(entry.id)
-  );
-
-  const voteId =
-    voteDocumentId(
-      entry,
-      user.uid
-    );
-
-  const voteRef = doc(
-    db,
-    "chainVotes",
-    voteId
-  );
-
-  return runTransaction(
-    db,
-    async (transaction) => {
-      const [
-        entrySnapshot,
-        voteSnapshot
-      ] = await Promise.all([
-        transaction.get(entryRef),
-        transaction.get(voteRef)
-      ]);
-
-      if (!entrySnapshot.exists()) {
-        throw new Error(
-          "This Chain entry no longer exists."
-        );
+export async function getMyChainVotes(entries=[]) {
+  const user=auth.currentUser;
+  if(!user||!entries.length)return {};
+  const result={};
+  await Promise.all(entries.map(async entry=>{
+    if(!entry?.id||!entry?.userId)return;
+    try {
+      const snapshot=await getDoc(doc(db,"chainVotes",voteDocumentId(entry,user.uid)));
+      if(snapshot.exists()){
+        const direction=Number(snapshot.data()?.direction);
+        if(direction===1||direction===-1)result[chainEntryKey(entry)]=direction;
       }
-
-      const currentEntry =
-        entrySnapshot.data();
-
-      const previousDirection =
-        voteSnapshot.exists()
-          ? Number(
-              voteSnapshot.data()
-                ?.direction
-            ) || 0
-          : 0;
-
-      const nextDirection =
-        previousDirection === direction
-          ? 0
-          : direction;
-
-      let upCount =
-        Number(
-          currentEntry.chainUpCount
-        ) || 0;
-
-      let downCount =
-        Number(
-          currentEntry.chainDownCount
-        ) || 0;
-
-      let score =
-        Number(
-          currentEntry.chainScore
-        ) || 0;
-
-      if (previousDirection === 1) {
-        upCount =
-          Math.max(
-            0,
-            upCount - 1
-          );
-        score -= 1;
-      } else if (
-        previousDirection === -1
-      ) {
-        downCount =
-          Math.max(
-            0,
-            downCount - 1
-          );
-        score += 1;
-      }
-
-      if (nextDirection === 1) {
-        upCount += 1;
-        score += 1;
-      } else if (
-        nextDirection === -1
-      ) {
-        downCount += 1;
-        score -= 1;
-      }
-
-      transaction.update(
-        entryRef,
-        {
-          chainUpCount: upCount,
-          chainDownCount: downCount,
-          chainScore: score
-        }
-      );
-
-      if (nextDirection === 0) {
-        if (voteSnapshot.exists()) {
-          transaction.delete(
-            voteRef
-          );
-        }
-      } else {
-        transaction.set(
-          voteRef,
-          {
-            id: voteId,
-            voterUserId:
-              user.uid,
-            targetUserId:
-              String(
-                entry.userId
-              ),
-            targetEntryId:
-              String(
-                entry.id
-              ),
-            direction:
-              nextDirection,
-            createdAtISO:
-              voteSnapshot.exists()
-                ? voteSnapshot
-                    .data()
-                    ?.createdAtISO ||
-                  new Date()
-                    .toISOString()
-                : new Date()
-                    .toISOString(),
-            createdAt:
-              voteSnapshot.exists()
-                ? voteSnapshot
-                    .data()
-                    ?.createdAt ||
-                  serverTimestamp()
-                : serverTimestamp(),
-            updatedAtISO:
-              new Date()
-                .toISOString(),
-            updatedAt:
-              serverTimestamp()
-          }
-        );
-      }
-
-      return {
-        direction:
-          nextDirection,
-        chainUpCount:
-          upCount,
-        chainDownCount:
-          downCount,
-        chainScore:
-          score
-      };
-    }
-  );
+    } catch(error) { console.warn("Could not load Chain vote:",error?.code||error); }
+  }));
+  return result;
 }
