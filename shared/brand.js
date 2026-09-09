@@ -1,13 +1,14 @@
 export const BRAND = Object.freeze({
-  teal: "#3BB6B1",
-  tealDark: "#247E7A",
-  yellow: "#FFC00E",
-  ink: "#172326",
-  muted: "#6E7F82",
-  line: "#DCE7E7",
-  surface: "#FFFFFF",
-  background: "#F4F8F8",
-  danger: "#9B3B3B",
+  // Exact Lit Chain PWA palette
+  teal: "#2F8E9C",
+  tealDark: "#2F8E9C",
+  yellow: "#C9962A",
+  ink: "#0B2D45",
+  muted: "#61717C",
+  line: "#D9DDD9",
+  surface: "#FFFDF8",
+  background: "#FBF7EF",
+  danger: "#B13B3B",
   logoHorizontal:
     "https://litchain.org/branding/lit-chain-logo-horizontal.png",
   icon:
