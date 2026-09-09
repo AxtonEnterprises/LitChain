@@ -14,13 +14,7 @@ import {
   View
 } from "react-native";
 
-import {
-  MaterialCommunityIcons
-} from "@expo/vector-icons";
-
-import {
-  router
-} from "expo-router";
+import { router } from "expo-router";
 
 import AppHeader from "../components/AppHeader";
 import BottomNav from "../components/BottomNav";
@@ -58,43 +52,35 @@ function notificationTitle(item) {
   }
 }
 
-function iconName(type) {
+function glyph(type) {
   switch (type) {
     case "friend_request":
-      return "account-plus-outline";
+      return "+";
     case "group_invite":
-      return "account-group-outline";
+      return "◎";
     case "forum_reply":
     case "chain_reply":
-      return "reply-outline";
+      return "↩";
     case "assignment":
-      return "clipboard-text-outline";
+      return "▤";
     case "grade":
-      return "school-outline";
+      return "A";
     default:
-      return "bell-outline";
+      return "◇";
   }
 }
 
 export default function NotificationsScreen() {
-  const [items, setItems] =
-    useState([]);
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const [loading, setLoading] =
-    useState(true);
-
-  const load = useCallback(
-    async () => {
-      try {
-        setItems(
-          await getNativeNotifications()
-        );
-      } finally {
-        setLoading(false);
-      }
-    },
-    []
-  );
+  const load = useCallback(async () => {
+    try {
+      setItems(await getNativeNotifications());
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     load();
@@ -102,17 +88,12 @@ export default function NotificationsScreen() {
 
   async function openItem(item) {
     if (!item.read) {
-      await markNativeNotificationRead(
-        item.id
-      );
+      await markNativeNotificationRead(item.id);
 
       setItems((current) =>
         current.map((candidate) =>
           candidate.id === item.id
-            ? {
-                ...candidate,
-                read: true
-              }
+            ? { ...candidate, read: true }
             : candidate
         )
       );
@@ -125,7 +106,6 @@ export default function NotificationsScreen() {
           groupId: String(item.groupId)
         }
       });
-
       return;
     }
 
@@ -151,47 +131,27 @@ export default function NotificationsScreen() {
       />
 
       <View style={styles.toolbar}>
-        <Pressable
-          onPress={() =>
-            router.back()
-          }
-        >
-          <Text style={styles.back}>
-            ‹ Back
-          </Text>
+        <Pressable onPress={() => router.back()}>
+          <Text style={styles.back}>‹ Back</Text>
         </Pressable>
 
-        <Pressable
-          onPress={markAll}
-        >
-          <Text style={styles.markAll}>
-            Mark all read
-          </Text>
+        <Pressable onPress={markAll}>
+          <Text style={styles.markAll}>Mark all read</Text>
         </Pressable>
       </View>
 
       {loading ? (
         <View style={styles.center}>
-          <ActivityIndicator
-            size="large"
-          />
+          <ActivityIndicator size="large" />
         </View>
       ) : (
         <FlatList
           data={items}
-          keyExtractor={(item) =>
-            item.id
-          }
-          contentContainerStyle={
-            styles.list
-          }
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.list}
           ListEmptyComponent={
             <View style={styles.center}>
-              <MaterialCommunityIcons
-                name="bell-check-outline"
-                size={42}
-                color={BRAND.muted}
-              />
+              <Text style={styles.emptyGlyph}>✓</Text>
               <Text style={styles.empty}>
                 You're all caught up.
               </Text>
@@ -199,54 +159,36 @@ export default function NotificationsScreen() {
           }
           renderItem={({ item }) => (
             <Pressable
-              onPress={() =>
-                openItem(item)
-              }
+              onPress={() => openItem(item)}
               style={[
                 styles.card,
-                !item.read &&
-                  styles.unread
+                !item.read && styles.unread
               ]}
             >
               <View style={styles.iconWrap}>
-                <MaterialCommunityIcons
-                  name={iconName(
-                    item.type
-                  )}
-                  size={24}
-                  color={
-                    BRAND.tealDark
-                  }
-                />
+                <Text style={styles.iconGlyph}>
+                  {glyph(item.type)}
+                </Text>
               </View>
 
               <View style={styles.copy}>
                 <Text
                   style={[
                     styles.message,
-                    !item.read &&
-                      styles.messageUnread
+                    !item.read && styles.messageUnread
                   ]}
                 >
-                  {notificationTitle(
-                    item
-                  )}
+                  {notificationTitle(item)}
                 </Text>
 
                 {!!item.createdAtISO && (
-                  <Text
-                    style={styles.time}
-                  >
-                    {new Date(
-                      item.createdAtISO
-                    ).toLocaleString()}
+                  <Text style={styles.time}>
+                    {new Date(item.createdAtISO).toLocaleString()}
                   </Text>
                 )}
               </View>
 
-              {!item.read && (
-                <View style={styles.dot} />
-              )}
+              {!item.read && <View style={styles.dot} />}
             </Pressable>
           )}
         />
@@ -260,30 +202,24 @@ export default function NotificationsScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor:
-      BRAND.background
+    backgroundColor: BRAND.background
   },
   toolbar: {
     minHeight: 46,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderBottomColor:
-      BRAND.line,
-    backgroundColor:
-      BRAND.surface,
+    borderBottomColor: BRAND.line,
+    backgroundColor: BRAND.surface,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent:
-      "space-between"
+    justifyContent: "space-between"
   },
   back: {
-    color:
-      BRAND.tealDark,
+    color: BRAND.tealDark,
     fontWeight: "900"
   },
   markAll: {
-    color:
-      BRAND.tealDark,
+    color: BRAND.tealDark,
     fontWeight: "800",
     fontSize: 12
   },
@@ -298,53 +234,55 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     padding: 24
   },
+  emptyGlyph: {
+    fontSize: 38,
+    color: BRAND.muted,
+    fontWeight: "900"
+  },
   empty: {
-    color:
-      BRAND.muted,
+    color: BRAND.muted,
     marginTop: 10
   },
   card: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor:
-      BRAND.surface,
+    backgroundColor: BRAND.surface,
     borderWidth: 1,
-    borderColor:
-      BRAND.line,
+    borderColor: BRAND.line,
     borderRadius: 16,
     padding: 13,
     marginBottom: 10
   },
   unread: {
-    borderColor:
-      BRAND.teal,
-    backgroundColor:
-      "#F0FAF9"
+    borderColor: BRAND.teal,
+    backgroundColor: "#F0FAF9"
   },
   iconWrap: {
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor:
-      "#E8F7F6",
+    backgroundColor: "#E8F7F6",
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12
+  },
+  iconGlyph: {
+    color: BRAND.tealDark,
+    fontSize: 20,
+    fontWeight: "900"
   },
   copy: {
     flex: 1
   },
   message: {
-    color:
-      BRAND.ink,
+    color: BRAND.ink,
     lineHeight: 19
   },
   messageUnread: {
     fontWeight: "900"
   },
   time: {
-    color:
-      BRAND.muted,
+    color: BRAND.muted,
     fontSize: 10,
     marginTop: 4
   },
@@ -352,8 +290,7 @@ const styles = StyleSheet.create({
     width: 9,
     height: 9,
     borderRadius: 5,
-    backgroundColor:
-      BRAND.yellow,
+    backgroundColor: BRAND.yellow,
     marginLeft: 8
   }
 });
