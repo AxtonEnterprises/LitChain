@@ -1,22 +1,28 @@
-import { StyleSheet, Text, View } from "react-native";
+import {
+  Image,
+  StyleSheet,
+  View
+} from "react-native";
 
 export default function BrandMark() {
   return (
     <View style={styles.wrap}>
-      <View style={styles.icon}><Text style={styles.iconText}>LC</Text></View>
-      <Text style={styles.title}>Lit Chain</Text>
-      <Text style={styles.tagline}>Read. Connect. Continue the chain.</Text>
+      <Image
+        source={require("../../public/branding/lit-chain-logo-horizontal.png")}
+        resizeMode="contain"
+        style={styles.logo}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { alignItems: "center" },
-  icon: {
-    width: 78, height: 78, borderRadius: 20, backgroundColor: "#3bb6b1",
-    alignItems: "center", justifyContent: "center", marginBottom: 14
+  wrap: {
+    alignItems: "center",
+    justifyContent: "center"
   },
-  iconText: { color: "#fff", fontSize: 28, fontWeight: "800" },
-  title: { fontSize: 30, fontWeight: "800", color: "#162224" },
-  tagline: { marginTop: 4, color: "#607074", fontSize: 14 }
+  logo: {
+    width: 270,
+    height: 110
+  }
 });
