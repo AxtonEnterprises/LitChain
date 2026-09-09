@@ -6,10 +6,14 @@ import {
 } from "firebase/firestore";
 
 import { auth, db } from "../lib/firebase";
+
 import {
-  getNativeFriends,
   getNativeGroups
 } from "./social";
+
+import {
+  getNativeFriendBundle
+} from "./librarySocial";
 
 async function readCollection(path) {
   try {
@@ -26,6 +30,7 @@ async function readCollection(path) {
       `Could not read ${path.join("/")}:`,
       error?.code || error
     );
+
     return [];
   }
 }
@@ -41,6 +46,11 @@ export async function getNativeLibraryBundle() {
       savedBooks: [],
       savedChain: [],
       friends: [],
+      friendBundle: {
+        friends: [],
+        incoming: [],
+        outgoing: []
+      },
       groups: []
     };
   }
@@ -58,16 +68,14 @@ export async function getNativeLibraryBundle() {
         ...snapshot.data()
       };
     }
-  } catch {
-    profile = null;
-  }
+  } catch {}
 
   const [
     timeline,
     journal,
     savedBooks,
     savedChain,
-    friends,
+    friendBundle,
     groupBundle
   ] = await Promise.all([
     readCollection([
@@ -90,15 +98,18 @@ export async function getNativeLibraryBundle() {
       user.uid,
       "savedChainEntries"
     ]),
-    getNativeFriends(),
+    getNativeFriendBundle(),
     getNativeGroups()
   ]);
 
   timeline.sort((a, b) =>
-    String(b.updatedAtISO || "")
-      .localeCompare(
-        String(a.updatedAtISO || "")
+    String(
+      b.updatedAtISO || ""
+    ).localeCompare(
+      String(
+        a.updatedAtISO || ""
       )
+    )
   );
 
   journal.sort((a, b) =>
@@ -115,20 +126,22 @@ export async function getNativeLibraryBundle() {
     )
   );
 
-  savedChain.sort((a, b) =>
-    String(b.savedAtISO || "")
-      .localeCompare(
-        String(a.savedAtISO || "")
-      )
-  );
-
   return {
     profile,
     timeline,
     journal,
     savedBooks,
     savedChain,
-    friends,
+    friends: friendBundle.friends.map(
+      (item) => ({
+        id: item.otherUserId,
+        otherUserId:
+          item.otherUserId,
+        relationshipId: item.id,
+        ...(item.profile || {})
+      })
+    ),
+    friendBundle,
     groups: [
       ...groupBundle.mine,
       ...groupBundle.classes
