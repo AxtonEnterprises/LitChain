@@ -1697,11 +1697,12 @@ match /groups/{groupId} {
 
    match /members/{userId} {
     allow read:
-     if signedIn()
-     && (
-       resource.data.userId == request.auth.uid
-       || isGroupMember(groupId)
-     );
+ if signedIn()
+ && (
+   request.auth.uid == userId
+   || resource.data.userId == request.auth.uid
+   || isGroupMember(groupId)
+ );
 
     /*
      * Membership creation supports:
