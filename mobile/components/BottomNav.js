@@ -4,46 +4,81 @@ import {
   Text,
   View
 } from "react-native";
+
+import {
+  MaterialCommunityIcons
+} from "@expo/vector-icons";
+
 import { router } from "expo-router";
-
 import { PRIMARY_NAV } from "../../shared/navigation";
+import { BRAND } from "../../shared/brand";
 
-const symbols = {
-  discover: "◇",
-  chain: "◉",
-  groups: "◎",
-  library: "▤"
+const icons = {
+  discover: {
+    active: "compass",
+    inactive: "compass-outline"
+  },
+  chain: {
+    active: "link-variant",
+    inactive: "link-variant"
+  },
+  groups: {
+    active: "account-group",
+    inactive: "account-group-outline"
+  },
+  library: {
+    active: "bookshelf",
+    inactive: "bookshelf"
+  }
 };
 
-export default function BottomNav({ active = "chain" }) {
+export default function BottomNav({
+  active = "chain"
+}) {
   return (
     <View style={styles.wrap}>
       {PRIMARY_NAV.map((item) => {
-        const selected = item.key === active;
+        const selected =
+          item.key === active;
+
+        const icon =
+          icons[item.key] ||
+          {
+            active: "circle",
+            inactive: "circle-outline"
+          };
 
         return (
           <Pressable
             key={item.key}
             onPress={() => {
               if (!selected) {
-                router.replace(item.mobilePath);
+                router.replace(
+                  item.mobilePath
+                );
               }
             }}
             style={styles.item}
           >
-            <Text
-              style={[
-                styles.icon,
-                selected && styles.iconActive
-              ]}
-            >
-              {symbols[item.key] || "○"}
-            </Text>
+            <MaterialCommunityIcons
+              name={
+                selected
+                  ? icon.active
+                  : icon.inactive
+              }
+              size={23}
+              color={
+                selected
+                  ? BRAND.teal
+                  : "#87999c"
+              }
+            />
 
             <Text
               style={[
                 styles.label,
-                selected && styles.labelActive
+                selected &&
+                  styles.labelActive
               ]}
             >
               {item.label}
@@ -57,13 +92,13 @@ export default function BottomNav({ active = "chain" }) {
 
 const styles = StyleSheet.create({
   wrap: {
-    minHeight: 72,
+    minHeight: 70,
     paddingHorizontal: 8,
     paddingTop: 7,
-    paddingBottom: 9,
+    paddingBottom: 8,
     borderTopWidth: 1,
-    borderTopColor: "#dce7e7",
-    backgroundColor: "#ffffff",
+    borderTopColor: BRAND.line,
+    backgroundColor: BRAND.surface,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-around"
@@ -73,20 +108,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center"
   },
-  icon: {
-    fontSize: 20,
-    color: "#87999c"
-  },
-  iconActive: {
-    color: "#3bb6b1"
-  },
   label: {
     marginTop: 3,
     fontSize: 11,
     color: "#6c7e81"
   },
   labelActive: {
-    color: "#162224",
+    color: BRAND.ink,
     fontWeight: "900"
   }
 });
