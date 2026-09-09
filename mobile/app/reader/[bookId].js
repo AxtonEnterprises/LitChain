@@ -7,13 +7,14 @@ import {
 
 import {
   ActivityIndicator,
-  Dimensions,
+  AppState,
   FlatList,
   Pressable,
   SafeAreaView,
   StyleSheet,
   Text,
-  View
+  View,
+  useWindowDimensions
 } from "react-native";
 
 import {
@@ -26,13 +27,14 @@ import { BRAND } from "../../../shared/brand";
 import {
   findResumePage,
   normalizeBookText,
-  paginateParagraphs,
+  paginateParagraphsByGeometry,
   pageStartParagraph,
   splitBookParagraphs
 } from "../../../shared/readerCore";
 
 import {
   getNativeReadingProgress,
+  saveNativeReadingPosition,
   saveNativeReadingProgress
 } from "../../services/reading";
 
@@ -57,9 +59,15 @@ export default function Reader() {
   const [verified, setVerified] = useState(0);
   const [activePercent, setActivePercent] = useState(0);
   const [verifiedPercent, setVerifiedPercent] = useState(0);
+  const [readerHeight, setReaderHeight] = useState(0);
+  const [appActive, setAppActive] = useState(
+    AppState.currentState === "active"
+  );
 
   const ref = useRef(null);
-  const width = Dimensions.get("window").width;
+  const readingTimeBankRef = useRef(0);
+  const registeringRef = useRef(false);
+  const { width } = useWindowDimensions();
 
   const paragraphs = useMemo(
     () => splitBookParagraphs(text),
@@ -67,9 +75,26 @@ export default function Reader() {
   );
 
   const pages = useMemo(
-    () => paginateParagraphs(paragraphs),
-    [paragraphs]
+    () =>
+      paginateParagraphsByGeometry({
+        paragraphs,
+        containerWidth: width,
+        containerHeight: readerHeight,
+        fontSize: font
+      }),
+    [paragraphs, width, readerHeight, font]
   );
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener(
+      "change",
+      (nextState) => {
+        setAppActive(nextState === "active");
+      }
+    );
+
+    return () => subscription.remove();
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -156,12 +181,16 @@ export default function Reader() {
     );
   }, [pages.length, resume]);
 
-  async function persist(index) {
+  /*
+   * Navigation position is intentionally separate from verified reading.
+   * Merely opening/swiping to a page must not award reading credit.
+   */
+  async function persistPosition(index) {
     const paragraphIndex =
       pageStartParagraph(pages, index);
 
     const result =
-      await saveNativeReadingProgress({
+      await saveNativeReadingPosition({
         bookId,
         title,
         author,
@@ -170,20 +199,122 @@ export default function Reader() {
       });
 
     if (result) {
-      setVerified(result.verifiedParagraphIndex);
       setActivePercent(result.activePercent);
-      setVerifiedPercent(result.percentComplete);
     }
   }
+
+  /*
+   * Reset accumulated reading time when the page changes. The timer below
+   * then advances only the next sequential paragraph that is actually visible
+   * on the current page.
+   */
+  useEffect(() => {
+    readingTimeBankRef.current = 0;
+  }, [page, bookId]);
+
+  useEffect(() => {
+    if (
+      !bookId ||
+      !pages.length ||
+      !paragraphs.length ||
+      !appActive
+    ) {
+      return;
+    }
+
+    const visibleParagraphs = [
+      ...new Set(
+        (pages[page] || []).map((item) => item.index)
+      )
+    ];
+
+    const candidate = Math.min(
+      Math.max(Number(verified) || 0, 0) + 1,
+      paragraphs.length - 1
+    );
+
+    if (!visibleParagraphs.includes(candidate)) {
+      return;
+    }
+
+    let lastTick = Date.now();
+
+    const interval = setInterval(async () => {
+      const now = Date.now();
+      const delta = Math.max(0, now - lastTick);
+      lastTick = now;
+
+      if (!appActive) return;
+
+      readingTimeBankRef.current += delta;
+
+      if (
+        registeringRef.current ||
+        readingTimeBankRef.current < 1000
+      ) {
+        return;
+      }
+
+      registeringRef.current = true;
+
+      try {
+        const result =
+          await saveNativeReadingProgress({
+            bookId,
+            title,
+            author,
+            paragraphIndex: candidate,
+            totalParagraphs: paragraphs.length
+          });
+
+        if (result) {
+          const nextVerified =
+            Number(
+              result.verifiedParagraphIndex ??
+              candidate
+            ) || 0;
+
+          if (nextVerified > verified) {
+            readingTimeBankRef.current =
+              Math.max(
+                0,
+                readingTimeBankRef.current - 1000
+              );
+          }
+
+          setVerified(nextVerified);
+          setVerifiedPercent(
+            Number(result.percentComplete || 0)
+          );
+        }
+      } finally {
+        registeringRef.current = false;
+      }
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, [
+    appActive,
+    author,
+    bookId,
+    page,
+    pages,
+    paragraphs.length,
+    title,
+    verified
+  ]);
 
   function go(index) {
     const safe = Math.max(
       0,
-      Math.min(index, Math.max(pages.length - 1, 0))
+      Math.min(
+        index,
+        Math.max(pages.length - 1, 0)
+      )
     );
 
     setPage(safe);
-    persist(safe);
+    persistPosition(safe);
 
     ref.current?.scrollToIndex({
       index: safe,
@@ -209,7 +340,12 @@ export default function Reader() {
 
   if (loading) {
     return (
-      <SafeAreaView style={[styles.safe, { backgroundColor: palette.bg }]}>
+      <SafeAreaView
+        style={[
+          styles.safe,
+          { backgroundColor: palette.bg }
+        ]}
+      >
         <View style={styles.center}>
           <ActivityIndicator size="large" />
         </View>
@@ -218,7 +354,12 @@ export default function Reader() {
   }
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: palette.bg }]}>
+    <SafeAreaView
+      style={[
+        styles.safe,
+        { backgroundColor: palette.bg }
+      ]}
+    >
       <View
         style={[
           styles.header,
@@ -228,7 +369,10 @@ export default function Reader() {
           }
         ]}
       >
-        <Pressable onPress={() => router.back()} style={styles.headerIcon}>
+        <Pressable
+          onPress={() => router.back()}
+          style={styles.headerIcon}
+        >
           <Text style={styles.navGlyph}>‹</Text>
         </Pressable>
 
@@ -257,13 +401,19 @@ export default function Reader() {
         </View>
 
         <Pressable
-          onPress={() => setDark((value) => !value)}
+          onPress={() =>
+            setDark((value) => !value)
+          }
           style={styles.headerIcon}
         >
           <Text
             style={[
               styles.modeGlyph,
-              { color: dark ? "#EEF3F3" : BRAND.ink }
+              {
+                color: dark
+                  ? "#EEF3F3"
+                  : BRAND.ink
+              }
             ]}
           >
             {dark ? "☀" : "☾"}
@@ -289,6 +439,7 @@ export default function Reader() {
           >
             Active
           </Text>
+
           <Text
             style={[
               styles.progressValue,
@@ -308,6 +459,7 @@ export default function Reader() {
           >
             Verified
           </Text>
+
           <Text
             style={[
               styles.progressValue,
@@ -328,55 +480,92 @@ export default function Reader() {
         </Text>
       </View>
 
-      <FlatList
-        ref={ref}
-        horizontal
-        pagingEnabled
-        data={pages}
-        keyExtractor={(_, index) => String(index)}
-        showsHorizontalScrollIndicator={false}
-        getItemLayout={(_, index) => ({
-          length: width,
-          offset: width * index,
-          index
-        })}
-        onMomentumScrollEnd={(event) => {
-          const next = Math.round(
-            event.nativeEvent.contentOffset.x /
-              Math.max(width, 1)
+      <View
+        style={styles.readerViewport}
+        onLayout={(event) => {
+          const nextHeight = Math.floor(
+            event.nativeEvent.layout.height
           );
 
-          setPage(next);
-          persist(next);
+          if (
+            nextHeight > 0 &&
+            nextHeight !== readerHeight
+          ) {
+            setReaderHeight(nextHeight);
+          }
         }}
-        renderItem={({ item }) => (
-          <View style={[styles.page, { width }]}>
-            {item.map((paragraph) => (
-              <View key={paragraph.index} style={styles.row}>
-                <Text
-                  style={[
-                    styles.num,
-                    { color: palette.muted }
-                  ]}
-                >
-                  {paragraph.index + 1}
-                </Text>
+      >
+        {!!readerHeight && (
+          <FlatList
+            ref={ref}
+            horizontal
+            pagingEnabled
+            data={pages}
+            key={`${width}:${readerHeight}:${font}`}
+            keyExtractor={(_, index) =>
+              String(index)
+            }
+            showsHorizontalScrollIndicator={false}
+            getItemLayout={(_, index) => ({
+              length: width,
+              offset: width * index,
+              index
+            })}
+            onMomentumScrollEnd={(event) => {
+              const next = Math.round(
+                event.nativeEvent.contentOffset.x /
+                  Math.max(width, 1)
+              );
 
-                <Text
-                  style={{
-                    flex: 1,
-                    color: palette.text,
-                    fontSize: font,
-                    lineHeight: font * 1.55
-                  }}
-                >
-                  {paragraph.text}
-                </Text>
+              setPage(next);
+              persistPosition(next);
+            }}
+            renderItem={({ item }) => (
+              <View
+                style={[
+                  styles.page,
+                  { width }
+                ]}
+              >
+                {item.map(
+                  (paragraph, fragmentIndex) => (
+                    <View
+                      key={`${paragraph.index}:${fragmentIndex}`}
+                      style={styles.row}
+                    >
+                      <Text
+                        style={[
+                          styles.num,
+                          {
+                            color:
+                              palette.muted
+                          }
+                        ]}
+                      >
+                        {paragraph.continuation
+                          ? ""
+                          : paragraph.index + 1}
+                      </Text>
+
+                      <Text
+                        style={{
+                          flex: 1,
+                          color: palette.text,
+                          fontSize: font,
+                          lineHeight:
+                            font * 1.55
+                        }}
+                      >
+                        {paragraph.text}
+                      </Text>
+                    </View>
+                  )
+                )}
               </View>
-            ))}
-          </View>
+            )}
+          />
         )}
-      />
+      </View>
 
       <View
         style={[
@@ -387,17 +576,24 @@ export default function Reader() {
           }
         ]}
       >
-        <Pressable onPress={() => go(page - 1)} style={styles.controlButton}>
+        <Pressable
+          onPress={() => go(page - 1)}
+          style={styles.controlButton}
+        >
           <Text style={styles.navGlyph}>‹</Text>
         </Pressable>
 
         <Pressable
           onPress={() =>
-            setFont((value) => Math.max(14, value - 1))
+            setFont((value) =>
+              Math.max(14, value - 1)
+            )
           }
           style={styles.controlButton}
         >
-          <Text style={styles.controlText}>A−</Text>
+          <Text style={styles.controlText}>
+            A−
+          </Text>
         </Pressable>
 
         <Text
@@ -406,19 +602,27 @@ export default function Reader() {
             fontWeight: "700"
           }}
         >
-          {page + 1}/{Math.max(pages.length, 1)}
+          {page + 1}/
+          {Math.max(pages.length, 1)}
         </Text>
 
         <Pressable
           onPress={() =>
-            setFont((value) => Math.min(28, value + 1))
+            setFont((value) =>
+              Math.min(28, value + 1)
+            )
           }
           style={styles.controlButton}
         >
-          <Text style={styles.controlText}>A+</Text>
+          <Text style={styles.controlText}>
+            A+
+          </Text>
         </Pressable>
 
-        <Pressable onPress={() => go(page + 1)} style={styles.controlButton}>
+        <Pressable
+          onPress={() => go(page + 1)}
+          style={styles.controlButton}
+        >
           <Text style={styles.navGlyph}>›</Text>
         </Pressable>
       </View>
@@ -430,11 +634,13 @@ const styles = StyleSheet.create({
   safe: {
     flex: 1
   },
+
   center: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center"
   },
+
   header: {
     minHeight: 68,
     paddingHorizontal: 10,
@@ -442,29 +648,35 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center"
   },
+
   headerIcon: {
     width: 42,
     height: 42,
     alignItems: "center",
     justifyContent: "center"
   },
+
   navGlyph: {
     color: BRAND.tealDark,
     fontSize: 30,
     fontWeight: "700"
   },
+
   modeGlyph: {
     fontSize: 21,
     fontWeight: "900"
   },
+
   titleWrap: {
     flex: 1,
     paddingHorizontal: 6
   },
+
   title: {
     fontWeight: "900",
     fontSize: 17
   },
+
   progressWrap: {
     minHeight: 44,
     paddingHorizontal: 16,
@@ -473,40 +685,53 @@ const styles = StyleSheet.create({
     gap: 18,
     alignItems: "center"
   },
+
   progressCopy: {
     flexDirection: "row",
     gap: 4,
     alignItems: "baseline"
   },
+
   progressLabel: {
     fontSize: 9,
     textTransform: "uppercase",
     fontWeight: "800"
   },
+
   progressValue: {
     fontSize: 12,
     fontWeight: "900"
   },
+
   verifiedParagraph: {
     flex: 1,
     textAlign: "right",
     fontSize: 9
   },
+
+  readerViewport: {
+    flex: 1,
+    overflow: "hidden"
+  },
+
   page: {
     flex: 1,
     paddingHorizontal: 20,
-    paddingVertical: 22
+    paddingVertical: 0
   },
+
   row: {
     flexDirection: "row",
     alignItems: "flex-start",
     marginBottom: 18
   },
+
   num: {
     width: 34,
     fontSize: 10,
     paddingTop: 4
   },
+
   controls: {
     minHeight: 62,
     borderTopWidth: 1,
@@ -514,12 +739,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-around"
   },
+
   controlButton: {
     minWidth: 44,
     minHeight: 44,
     alignItems: "center",
     justifyContent: "center"
   },
+
   controlText: {
     color: BRAND.tealDark,
     fontSize: 16,
