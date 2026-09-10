@@ -21,6 +21,7 @@ import {
 } from "expo-router";
 
 import BottomNav from "../../components/BottomNav";
+import CalendarField from "../../components/CalendarField";
 import { BRAND } from "../../../shared/brand";
 
 import {
@@ -471,12 +472,10 @@ export default function AssignmentEdit() {
         <Text style={styles.label}>
           Due date
         </Text>
-        <TextInput
+        <CalendarField
           value={dueAt}
-          onChangeText={setDueAt}
-          placeholder="YYYY-MM-DD"
-          autoCapitalize="none"
-          style={styles.input}
+          onChange={setDueAt}
+          placeholder="Select due date"
         />
 
         <View style={styles.twoColumns}>

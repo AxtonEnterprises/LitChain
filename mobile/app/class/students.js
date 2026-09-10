@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -8,7 +8,7 @@ import {
   Text,
   View
 } from "react-native";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import BottomNav from "../../components/BottomNav";
 import { BRAND } from "../../../shared/brand";
 import {
@@ -55,6 +55,12 @@ export default function ClassStudents() {
   }
 
   useEffect(() => { load(); }, [classId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [classId])
+  );
 
   const role = classData?.membership?.role || "member";
   const isOwner = role === "owner";

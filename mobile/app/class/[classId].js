@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useState
@@ -18,6 +19,7 @@ import {
 
 import {
   router,
+  useFocusEffect,
   useLocalSearchParams
 } from "expo-router";
 
@@ -186,6 +188,12 @@ export default function ClassHome() {
     classId,
     params.refresh
   ]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [classId])
+  );
 
   const role =
     classData?.membership?.role ||
