@@ -39,6 +39,15 @@ import {
   getNativeClassAssignments
 } from "../../services/classAssignments";
 
+import {
+  assignmentReadingPercent,
+  getNativeClassStudentProgress,
+  progressMapForUser,
+  syncNativeClassReadingProgress
+} from "../../services/classProgress";
+
+import { auth } from "../../lib/firebase";
+
 function formatDue(value) {
   if (!value) return "No due date";
 
@@ -76,6 +85,8 @@ export default function ClassHome() {
     useState([]);
   const [assignments, setAssignments] =
     useState([]);
+  const [progressRows, setProgressRows] =
+    useState([]);
   const [
     generalDiscussion,
     setGeneralDiscussion
@@ -104,6 +115,23 @@ export default function ClassHome() {
         getNativeClassAssignments(classId)
       ]);
 
+      try {
+        await syncNativeClassReadingProgress(classId);
+      } catch (error) {
+        console.warn(
+          "Class progress sync:",
+          error?.code || error
+        );
+      }
+
+      let loadedProgress = [];
+      try {
+        loadedProgress =
+          await getNativeClassStudentProgress(classId);
+      } catch {
+        loadedProgress = [];
+      }
+
       let discussion =
         await getGeneralClassDiscussion(
           classId
@@ -125,6 +153,9 @@ export default function ClassHome() {
       setMembers(loadedMembers);
       setAssignments(
         loadedAssignments
+      );
+      setProgressRows(
+        loadedProgress
       );
       setGeneralDiscussion(
         discussion
@@ -159,6 +190,12 @@ export default function ClassHome() {
   const role =
     classData?.membership?.role ||
     "member";
+
+  const currentProgressByBook =
+    progressMapForUser(
+      progressRows,
+      auth.currentUser?.uid || ""
+    );
 
   const students = useMemo(
     () =>
@@ -396,6 +433,25 @@ export default function ClassHome() {
               }
             >
               Students
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() =>
+              router.push({
+                pathname:
+                  "/class/progress",
+                params: { classId }
+              })
+            }
+            style={styles.smallButton}
+          >
+            <Text
+              style={
+                styles.smallButtonText
+              }
+            >
+              Progress
             </Text>
           </Pressable>
 
@@ -656,6 +712,15 @@ export default function ClassHome() {
                       value={String(
                         item.totalPoints
                       )}
+                    />
+                    <Meta
+                      label="Progress"
+                      value={`${assignmentReadingPercent(
+                        item,
+                        currentProgressByBook[
+                          String(item.bookId)
+                        ] || null
+                      )}%`}
                     />
                   </View>
 
