@@ -129,17 +129,24 @@ export async function getNativeDiscoverableGroups() {
     })
   );
 
+  /*
+   * Classes are intentionally allowed here.
+   * A discoverable/public class configured for open or request
+   * enrollment should be joinable exactly like the PWA rules allow.
+   */
   return rows.filter((group) => {
-    if (group.type === "class") return false;
     if (activeMembership(group.membership)) return false;
 
-    return (
+    const discoverable =
       group.discoverable === true ||
       group.visibility === "discoverable" ||
-      group.visibility === "public" ||
+      group.visibility === "public";
+
+    const joinable =
       group.joinPolicy === "open" ||
-      group.joinPolicy === "request_to_join"
-    );
+      group.joinPolicy === "request_to_join";
+
+    return discoverable && joinable;
   });
 }
 
@@ -152,6 +159,24 @@ export async function joinNativeGroup(group) {
   }
 
   if (group.joinPolicy === "request_to_join") {
+    /*
+     * Firestore requires request-to-join groups/classes to be
+     * discoverable or public. Surface a useful client error rather
+     * than an opaque permissions failure for an invalid combination.
+     */
+    const isDiscoverable =
+      group.discoverable === true ||
+      group.visibility === "discoverable" ||
+      group.visibility === "public";
+
+    if (!isDiscoverable) {
+      throw new Error(
+        group.type === "class"
+          ? "This class must be Discoverable or Public before students can request to join."
+          : "This group must be Discoverable or Public before readers can request to join."
+      );
+    }
+
     const now = new Date().toISOString();
 
     const requestRef = doc(
@@ -169,9 +194,6 @@ export async function joinNativeGroup(group) {
         return { status: "pending" };
       }
 
-      // Firestore only allows the requester to CREATE a pending
-      // request. Delete an old accepted/declined request first so
-      // this is a create rather than an unauthorized update.
       await deleteDoc(requestRef);
     }
 
@@ -183,9 +205,7 @@ export async function joinNativeGroup(group) {
       requestedAt: serverTimestamp()
     });
 
-    return {
-      status: "pending"
-    };
+    return { status: "pending" };
   }
 
   if (
@@ -193,7 +213,11 @@ export async function joinNativeGroup(group) {
     group.visibility !== "public" &&
     group.visibility !== "discoverable"
   ) {
-    throw new Error("This group is invite only.");
+    throw new Error(
+      group.type === "class"
+        ? "This class is invite only."
+        : "This group is invite only."
+    );
   }
 
   const now = new Date().toISOString();
@@ -216,9 +240,7 @@ export async function joinNativeGroup(group) {
     }
   );
 
-  return {
-    status: "joined"
-  };
+  return { status: "joined" };
 }
 
 export async function cancelNativeGroupJoinRequest(groupId) {
@@ -306,9 +328,7 @@ export async function respondNativeGroupJoinRequest(
       decidedAt: serverTimestamp()
     });
 
-    return {
-      status: "declined"
-    };
+    return { status: "declined" };
   }
 
   const now = new Date().toISOString();
@@ -340,9 +360,7 @@ export async function respondNativeGroupJoinRequest(
 
   await batch.commit();
 
-  return {
-    status: "accepted"
-  };
+  return { status: "accepted" };
 }
 
 export async function updateNativeGroupMemberRole(

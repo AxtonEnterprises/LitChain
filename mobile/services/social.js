@@ -11,9 +11,7 @@ import { auth, db } from "../lib/firebase";
 
 async function safeGetDocs(refOrQuery) {
   try {
-    return await getDocs(
-      refOrQuery
-    );
+    return await getDocs(refOrQuery);
   } catch (error) {
     console.warn(
       "Optional social query failed:",
@@ -33,10 +31,7 @@ async function publicProfile(userId) {
 
   for (const path of candidates) {
     try {
-      const snapshot =
-        await getDoc(
-          doc(db, ...path)
-        );
+      const snapshot = await getDoc(doc(db, ...path));
 
       if (snapshot.exists()) {
         return {
@@ -58,90 +53,74 @@ export async function getNativeFriends() {
 
   const ids = new Set();
 
-  const direct =
-    await safeGetDocs(
-      collection(
-        db,
-        "users",
-        user.uid,
-        "friends"
-      )
-    );
+  /*
+   * Current PWA friendship records use:
+   *   friendships/{id}.users = [uidA, uidB]
+   *   status = "accepted"
+   *
+   * Keep the old direct user/friends fallback for compatibility,
+   * but query the canonical friendship schema first.
+   */
+  const friendshipQuery = await safeGetDocs(
+    query(
+      collection(db, "friendships"),
+      where("users", "array-contains", user.uid)
+    )
+  );
+
+  if (friendshipQuery) {
+    friendshipQuery.docs.forEach((item) => {
+      const data = item.data();
+      const members = Array.isArray(data.users)
+        ? data.users
+        : [];
+
+      const other = members.find(
+        (id) => String(id) !== String(user.uid)
+      );
+
+      if (
+        other &&
+        data.status === "accepted"
+      ) {
+        ids.add(String(other));
+      }
+    });
+  }
+
+  const direct = await safeGetDocs(
+    collection(
+      db,
+      "users",
+      user.uid,
+      "friends"
+    )
+  );
 
   if (direct) {
     direct.docs.forEach((item) => {
       const data = item.data();
 
-      ids.add(
-        String(
-          data.otherUserId ||
-          data.userId ||
-          data.uid ||
-          item.id
-        )
-      );
-    });
-  }
+      const other =
+        data.otherUserId ||
+        data.userId ||
+        data.uid ||
+        item.id;
 
-  const friendshipQuery =
-    await safeGetDocs(
-      query(
-        collection(
-          db,
-          "friendships"
-        ),
-        where(
-          "userIds",
-          "array-contains",
-          user.uid
-        )
-      )
-    );
-
-  if (friendshipQuery) {
-    friendshipQuery.docs.forEach(
-      (item) => {
-        const data = item.data();
-        const members =
-          Array.isArray(
-            data.userIds
-          )
-            ? data.userIds
-            : [];
-
-        const other =
-          data.otherUserId ||
-          members.find(
-            (id) =>
-              String(id) !==
-              user.uid
-          );
-
-        if (
-          other &&
-          data.status !==
-            "declined"
-        ) {
-          ids.add(String(other));
-        }
+      if (other) {
+        ids.add(String(other));
       }
-    );
+    });
   }
 
   ids.delete(user.uid);
 
-  const profiles =
-    await Promise.all(
-      [...ids].map(
-        async (userId) => ({
-          otherUserId: userId,
-          profile:
-            await publicProfile(
-              userId
-            )
-        })
-      )
-    );
+  const profiles = await Promise.all(
+    [...ids].map(async (userId) => ({
+      otherUserId: userId,
+      profile: await publicProfile(userId)
+    }))
+  );
 
   return profiles.map(
     ({ otherUserId, profile }) => ({
@@ -163,10 +142,9 @@ export async function getNativeGroups() {
     };
   }
 
-  const snapshot =
-    await safeGetDocs(
-      collection(db, "groups")
-    );
+  const snapshot = await safeGetDocs(
+    collection(db, "groups")
+  );
 
   if (!snapshot) {
     return {
@@ -176,49 +154,42 @@ export async function getNativeGroups() {
     };
   }
 
-  const rows =
-    await Promise.all(
-      snapshot.docs.map(
-        async (groupDoc) => {
-          const group = {
-            id: groupDoc.id,
-            ...groupDoc.data()
-          };
+  const rows = await Promise.all(
+    snapshot.docs.map(async (groupDoc) => {
+      const group = {
+        id: groupDoc.id,
+        ...groupDoc.data()
+      };
 
-          let membership = null;
+      let membership = null;
 
-          try {
-            const memberSnapshot =
-              await getDoc(
-                doc(
-                  db,
-                  "groups",
-                  groupDoc.id,
-                  "members",
-                  user.uid
-                )
-              );
+      try {
+        const memberSnapshot = await getDoc(
+          doc(
+            db,
+            "groups",
+            groupDoc.id,
+            "members",
+            user.uid
+          )
+        );
 
-            if (
-              memberSnapshot.exists()
-            ) {
-              membership = {
-                id:
-                  memberSnapshot.id,
-                ...memberSnapshot.data()
-              };
-            }
-          } catch {
-            membership = null;
-          }
-
-          return {
-            ...group,
-            membership
+        if (memberSnapshot.exists()) {
+          membership = {
+            id: memberSnapshot.id,
+            ...memberSnapshot.data()
           };
         }
-      )
-    );
+      } catch {
+        membership = null;
+      }
+
+      return {
+        ...group,
+        membership
+      };
+    })
+  );
 
   const activeMember = (group) =>
     Boolean(group.membership) &&
@@ -240,34 +211,30 @@ export async function getNativeGroups() {
     discoverable: rows.filter(
       (group) =>
         !activeMember(group) &&
-        group.type !== "class" &&
         (
           group.discoverable === true ||
-          group.visibility ===
-            "public" ||
-          group.joinPolicy ===
-            "open" ||
-          group.joinPolicy ===
-            "request_to_join"
+          group.visibility === "public" ||
+          group.visibility === "discoverable"
+        ) &&
+        (
+          group.joinPolicy === "open" ||
+          group.joinPolicy === "request_to_join"
         )
     )
   };
 }
 
-export async function getNativeGroupForum(
-  groupId
-) {
+export async function getNativeGroupForum(groupId) {
   if (!groupId) return [];
 
-  const snapshot =
-    await safeGetDocs(
-      collection(
-        db,
-        "groups",
-        String(groupId),
-        "forumPosts"
-      )
-    );
+  const snapshot = await safeGetDocs(
+    collection(
+      db,
+      "groups",
+      String(groupId),
+      "forumPosts"
+    )
+  );
 
   if (!snapshot) return [];
 
