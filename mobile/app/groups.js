@@ -109,28 +109,34 @@ export default function Groups() {
     });
   }
 
-  async function join(group) {
+  async function join(item) {
     try {
-      setBusyId(String(group.id));
-      const result = await joinNativeGroup(group);
+      setBusyId(String(item.id));
+      const result = await joinNativeGroup(item);
+      const noun = item.type === "class" ? "class" : "group";
+
       setStatus(
         result.status === "joined"
-          ? `Joined ${group.name}.`
-          : `Join request sent to ${group.name}.`
+          ? `Joined ${item.name}.`
+          : `Join request sent to ${item.name}.`
       );
+
       await load();
-      if (result.status === "joined") setView("mine");
+
+      if (result.status === "joined") {
+        setView(item.type === "class" ? "classes" : "mine");
+      }
     } catch (error) {
-      setStatus(error?.message || "Could not join this group.");
+      setStatus(error?.message || "Could not join this item.");
     } finally {
       setBusyId("");
     }
   }
 
-  async function cancel(group) {
+  async function cancel(item) {
     try {
-      setBusyId(String(group.id));
-      await cancelNativeGroupJoinRequest(group.id);
+      setBusyId(String(item.id));
+      await cancelNativeGroupJoinRequest(item.id);
       setStatus("Join request canceled.");
       await load();
     } catch (error) {
@@ -212,7 +218,7 @@ export default function Groups() {
               <View style={[styles.center, { height: viewportHeight }]}>
                 <Text style={styles.emptyTitle}>
                   {view === "discoverable"
-                    ? "No discoverable groups"
+                    ? "Nothing discoverable yet"
                     : view === "classes"
                       ? "No classes yet"
                       : "No groups yet"}
@@ -281,12 +287,10 @@ export default function Groups() {
                             onPress={() => cancel(item)}
                             style={styles.secondaryButton}
                           >
-                            <Text style={styles.secondaryButtonText}>Cancel Request</Text>
+                            <Text style={styles.secondaryButtonText}>
+                              Cancel Request
+                            </Text>
                           </Pressable>
-                        ) : item.joinPolicy === "invite_only" ? (
-                          <View style={styles.inviteOnly}>
-                            <Text style={styles.inviteOnlyText}>Invite only</Text>
-                          </View>
                         ) : (
                           <Pressable
                             disabled={busy}
@@ -294,7 +298,9 @@ export default function Groups() {
                             style={styles.primaryButton}
                           >
                             <Text style={styles.primaryButtonText}>
-                              {item.joinPolicy === "open" ? "Join Group" : "Request to Join"}
+                              {item.joinPolicy === "open"
+                                ? isClass ? "Join Class" : "Join Group"
+                                : isClass ? "Request to Join Class" : "Request to Join"}
                             </Text>
                           </Pressable>
                         )
@@ -332,7 +338,7 @@ export default function Groups() {
         <Pressable style={styles.overlay} onPress={() => setSearchOpen(false)}>
           <Pressable onPress={() => {}} style={styles.searchPopup}>
             <Text style={styles.searchTitle}>
-              Search {view === "classes" ? "Classes" : "Groups"}
+              Search {view === "classes" ? "Classes" : "Groups & Classes"}
             </Text>
             <TextInput
               autoFocus
@@ -446,14 +452,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginTop: 18
   },
-  inviteOnly: {
-    minHeight: 48,
-    borderRadius: 13,
-    backgroundColor: "#EEF2F2",
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  inviteOnlyText: { color: BRAND.muted, fontWeight: "800" },
   verticalDots: { position: "absolute", right: 5, top: "40%", gap: 5 },
   dot: { width: 5, height: 5, borderRadius: 999, backgroundColor: "#C5CECF" },
   dotActive: { width: 8, height: 8, backgroundColor: BRAND.tealDark },
