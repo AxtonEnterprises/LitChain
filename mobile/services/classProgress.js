@@ -22,6 +22,10 @@ function safeInt(value, fallback = 0) {
     : fallback;
 }
 
+function isTeacherRole(role) {
+  return ["owner", "admin", "moderator"].includes(role);
+}
+
 export function assignmentReadingPercent(assignment, progress) {
   if (!assignment || !progress) return 0;
 
@@ -61,10 +65,7 @@ export function assignmentReadingPercent(assignment, progress) {
 
 export function assignmentReadingPoints(assignment, progress) {
   const percent = assignmentReadingPercent(assignment, progress);
-  const totalPoints = Math.max(
-    Number(assignment?.totalPoints) || 0,
-    0
-  );
+  const totalPoints = Math.max(Number(assignment?.totalPoints) || 0, 0);
 
   return Math.round((percent / 100) * totalPoints * 100) / 100;
 }
@@ -77,21 +78,15 @@ export function classReadingPercent(assignments, progressByBook) {
   if (!reading.length) return 0;
 
   const total = reading.reduce((sum, assignment) => {
-    const progress = progressByBook?.[String(assignment.bookId)] || null;
+    const progress =
+      progressByBook?.[String(assignment.bookId)] || null;
+
     return sum + assignmentReadingPercent(assignment, progress);
   }, 0);
 
   return Math.round(total / reading.length);
 }
 
-/*
- * Mirrors the user's VERIFIED global Reader progress into the class-local
- * studentProgress collection. The Firestore rules intentionally allow a
- * class member to write only their own {uid}_{bookId} document.
- *
- * This means swiping/jumping in Reader never manufactures class credit:
- * only readingProgress.paragraphIndex / verifiedParagraphIndex is copied.
- */
 export async function syncNativeClassReadingProgress(classId) {
   const user = requireUser();
   const cleanClassId = String(classId || "");
@@ -101,13 +96,7 @@ export async function syncNativeClassReadingProgress(classId) {
   }
 
   const membership = await getDoc(
-    doc(
-      db,
-      "groups",
-      cleanClassId,
-      "members",
-      user.uid
-    )
+    doc(db, "groups", cleanClassId, "members", user.uid)
   );
 
   if (!membership.exists()) {
@@ -115,12 +104,7 @@ export async function syncNativeClassReadingProgress(classId) {
   }
 
   const readingSnapshot = await getDocs(
-    collection(
-      db,
-      "users",
-      user.uid,
-      "readingProgress"
-    )
+    collection(db, "users", user.uid, "readingProgress")
   );
 
   const writes = [];
@@ -160,10 +144,6 @@ export async function syncNativeClassReadingProgress(classId) {
       existing = null;
     }
 
-    /*
-     * Classroom rules require monotonic verified progress.
-     * Preserve the larger value if an older class-local record is ahead.
-     */
     const furthest = Math.max(
       verified,
       safeInt(existing?.furthestParagraphIndex, 0)
@@ -212,20 +192,70 @@ export async function syncNativeClassReadingProgress(classId) {
 
 export async function getNativeClassStudentProgress(classId) {
   const user = requireUser();
-  const snapshot = await getDocs(
-    collection(
-      db,
-      "groups",
-      String(classId),
-      "studentProgress"
+  const cleanClassId = String(classId || "");
+
+  const membershipSnapshot = await getDoc(
+    doc(db, "groups", cleanClassId, "members", user.uid)
+  );
+
+  if (!membershipSnapshot.exists()) {
+    throw new Error("You are not a member of this class.");
+  }
+
+  const role = membershipSnapshot.data()?.role || "member";
+
+  if (isTeacherRole(role)) {
+    const snapshot = await getDocs(
+      collection(db, "groups", cleanClassId, "studentProgress")
+    );
+
+    return snapshot.docs.map((item) => ({
+      id: item.id,
+      ...item.data(),
+      isCurrentUser: item.data()?.userId === user.uid
+    }));
+  }
+
+  /*
+   * Students cannot list the whole studentProgress collection under the
+   * current Firestore rules. Read only their exact documents for books
+   * assigned in this class.
+   */
+  const assignmentSnapshot = await getDocs(
+    collection(db, "groups", cleanClassId, "assignments")
+  );
+
+  const bookIds = [
+    ...new Set(
+      assignmentSnapshot.docs
+        .map((item) => item.data())
+        .filter((assignment) => assignment?.type !== "test")
+        .map((assignment) => String(assignment?.bookId || "").trim())
+        .filter(Boolean)
+    )
+  ];
+
+  const ownSnapshots = await Promise.all(
+    bookIds.map((bookId) =>
+      getDoc(
+        doc(
+          db,
+          "groups",
+          cleanClassId,
+          "studentProgress",
+          `${user.uid}_${bookId}`
+        )
+      )
     )
   );
 
-  return snapshot.docs.map((item) => ({
-    id: item.id,
-    ...item.data(),
-    isCurrentUser: item.data()?.userId === user.uid
-  }));
+  return ownSnapshots
+    .filter((snapshot) => snapshot.exists())
+    .map((snapshot) => ({
+      id: snapshot.id,
+      ...snapshot.data(),
+      isCurrentUser: true
+    }));
 }
 
 export function progressMapForUser(rows, userId) {
