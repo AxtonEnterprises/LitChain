@@ -18,6 +18,13 @@ import {
   useLocalSearchParams
 } from "expo-router";
 
+import {
+  doc,
+  getDoc
+} from "firebase/firestore";
+
+import { db } from "../../lib/firebase";
+
 import BottomNav from "../../components/BottomNav";
 import LitIcon from "../../components/LitIcon";
 
@@ -55,6 +62,33 @@ export default function Group() {
   async function load() {
     try {
       setLoading(true);
+
+      const groupSnapshot = await getDoc(
+        doc(
+          db,
+          "groups",
+          id
+        )
+      );
+
+      if (
+        groupSnapshot.exists() &&
+        groupSnapshot.data()?.type === "class"
+      ) {
+        router.replace({
+          pathname: "/class/[classId]",
+          params: {
+            classId: id,
+            name:
+              groupSnapshot.data()?.name ||
+              name ||
+              "Class",
+            role
+          }
+        });
+
+        return;
+      }
       setPosts(
         await getNativeGroupForumDisplay(id)
       );
