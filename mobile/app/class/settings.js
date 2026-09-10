@@ -46,6 +46,32 @@ export default function ClassSettings() {
       .finally(() => setLoading(false));
   }, [classId]);
 
+  function chooseVisibility(next) {
+    setVisibility(next);
+
+    /*
+     * Firestore only permits open/request enrollment on
+     * discoverable or public classes.
+     */
+    if (
+      next === "private" &&
+      ["open", "request_to_join"].includes(joinPolicy)
+    ) {
+      setJoinPolicy("invite_only");
+    }
+  }
+
+  function chooseJoinPolicy(next) {
+    setJoinPolicy(next);
+
+    if (
+      ["open", "request_to_join"].includes(next) &&
+      visibility === "private"
+    ) {
+      setVisibility("discoverable");
+    }
+  }
+
   async function save() {
     try {
       setSaving(true);
@@ -119,7 +145,7 @@ export default function ClassSettings() {
               key={id}
               active={visibility === id}
               label={label}
-              onPress={() => setVisibility(id)}
+              onPress={() => chooseVisibility(id)}
             />
           ))}
         </View>
@@ -135,10 +161,15 @@ export default function ClassSettings() {
               key={id}
               active={joinPolicy === id}
               label={label}
-              onPress={() => setJoinPolicy(id)}
+              onPress={() => chooseJoinPolicy(id)}
             />
           ))}
         </View>
+
+        <Text style={styles.help}>
+          Request/Open enrollment requires a Discoverable or Public class.
+          Selecting either option will automatically make a Private class Discoverable.
+        </Text>
 
         <Pressable disabled={saving} onPress={save} style={styles.save}>
           <Text style={styles.saveText}>{saving ? "Saving…" : "Save Settings"}</Text>
@@ -193,6 +224,12 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: BRAND.teal, borderColor: BRAND.teal },
   chipText: { color: BRAND.ink, fontWeight: "800" },
   chipTextActive: { color: "#FFF" },
+  help: {
+    color: BRAND.muted,
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 10
+  },
   save: {
     minHeight: 48,
     borderRadius: 13,
