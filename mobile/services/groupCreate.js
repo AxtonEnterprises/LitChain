@@ -9,11 +9,7 @@ import { auth, db } from "../lib/firebase";
 
 function requireUser() {
   const user = auth.currentUser;
-
-  if (!user) {
-    throw new Error("You must be logged in.");
-  }
-
+  if (!user) throw new Error("You must be logged in.");
   return user;
 }
 
@@ -22,53 +18,39 @@ export async function createNativeReadingGroup({
   description = "",
   avatar = "round-table",
   visibility = "discoverable",
-  joinPolicy = "request_to_join"
+  joinPolicy = "request_to_join",
+  type = "group"
 }) {
   const user = requireUser();
-
-  const cleanName =
-    String(name || "").trim();
+  const cleanName = String(name || "").trim();
 
   if (cleanName.length < 2) {
-    throw new Error(
-      "Enter a group name."
-    );
+    throw new Error(type === "class" ? "Enter a class name." : "Enter a group name.");
   }
 
-  const groupRef =
-    doc(collection(db, "groups"));
-
+  const cleanType = type === "class" ? "class" : "group";
+  const groupRef = doc(collection(db, "groups"));
   const now = new Date().toISOString();
 
-  const safeVisibility =
-    ["discoverable", "public", "private"]
-      .includes(visibility)
-      ? visibility
-      : "discoverable";
+  const safeVisibility = ["discoverable", "public", "private"].includes(visibility)
+    ? visibility
+    : cleanType === "class" ? "private" : "discoverable";
 
-  const safeJoinPolicy =
-    [
-      "open",
-      "request_to_join",
-      "invite_only"
-    ].includes(joinPolicy)
-      ? joinPolicy
-      : "request_to_join";
+  const safeJoinPolicy = ["open", "request_to_join", "invite_only"].includes(joinPolicy)
+    ? joinPolicy
+    : cleanType === "class" ? "invite_only" : "request_to_join";
 
   const batch = writeBatch(db);
 
   batch.set(groupRef, {
     id: groupRef.id,
     ownerId: user.uid,
-    type: "group",
+    type: cleanType,
     name: cleanName,
-    description:
-      String(description || "").trim(),
+    description: String(description || "").trim(),
     avatar,
     visibility: safeVisibility,
-    discoverable:
-      safeVisibility ===
-      "discoverable",
+    discoverable: safeVisibility === "discoverable",
     joinPolicy: safeJoinPolicy,
     createdAtISO: now,
     updatedAtISO: now,
@@ -77,13 +59,7 @@ export async function createNativeReadingGroup({
   });
 
   batch.set(
-    doc(
-      db,
-      "groups",
-      groupRef.id,
-      "members",
-      user.uid
-    ),
+    doc(db, "groups", groupRef.id, "members", user.uid),
     {
       userId: user.uid,
       groupId: groupRef.id,
@@ -94,6 +70,29 @@ export async function createNativeReadingGroup({
     }
   );
 
+  if (cleanType === "class") {
+    batch.set(
+      doc(db, "groups", groupRef.id, "forumPosts", "general-class-discussion"),
+      {
+        id: "general-class-discussion",
+        groupId: groupRef.id,
+        userId: user.uid,
+        title: "General Class Discussion",
+        body: "General discussion for this class.",
+        pinned: false,
+        locked: false,
+        isGeneralClassDiscussion: true,
+        forumUpCount: 0,
+        forumDownCount: 0,
+        forumScore: 0,
+        createdAtISO: now,
+        updatedAtISO: now,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      }
+    );
+  }
+
   await batch.commit();
 
   return {
@@ -103,7 +102,7 @@ export async function createNativeReadingGroup({
     avatar,
     visibility: safeVisibility,
     joinPolicy: safeJoinPolicy,
-    type: "group",
+    type: cleanType,
     membership: {
       userId: user.uid,
       groupId: groupRef.id,
