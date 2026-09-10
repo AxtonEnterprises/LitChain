@@ -6,11 +6,15 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View
 } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import BottomNav from "../../components/BottomNav";
 import { BRAND } from "../../../shared/brand";
+import {
+  findNativeReaderByUsername
+} from "../../services/librarySocial";
 import {
   canManageClass,
   classRoleLabel,
@@ -32,6 +36,9 @@ export default function ClassStudents() {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState("");
   const [status, setStatus] = useState("");
+  const [studentQuery, setStudentQuery] = useState("");
+  const [studentResult, setStudentResult] = useState(null);
+  const [studentSearching, setStudentSearching] = useState(false);
 
   async function load() {
     try {
@@ -102,6 +109,52 @@ export default function ClassStudents() {
     }
   }
 
+  async function searchStudent() {
+    try {
+      setStudentSearching(true);
+      setStatus("");
+      setStudentResult(null);
+
+      const result =
+        await findNativeReaderByUsername(
+          studentQuery
+        );
+
+      if (!result) {
+        setStatus(
+          "No reader found with that username."
+        );
+        return;
+      }
+
+      const isMember = members.some(
+        (member) =>
+          String(
+            member.userId || member.id
+          ) ===
+          String(
+            result.userId || result.id
+          )
+      );
+
+      if (isMember) {
+        setStatus(
+          `${memberName(result)} is already in this class.`
+        );
+        return;
+      }
+
+      setStudentResult(result);
+    } catch (error) {
+      setStatus(
+        error?.message ||
+          "Could not search for that reader."
+      );
+    } finally {
+      setStudentSearching(false);
+    }
+  }
+
   async function invite(friend) {
     const userId = String(friend.otherUserId || friend.id || "");
 
@@ -110,6 +163,8 @@ export default function ClassStudents() {
       setStatus("");
       await inviteNativeClassFriend(classId, userId);
       setStatus(`Invitation sent to ${memberName(friend)}.`);
+      setStudentResult(null);
+      setStudentQuery("");
     } catch (error) {
       setStatus(error?.message || "Could not send the invitation.");
     } finally {
@@ -201,21 +256,117 @@ export default function ClassStudents() {
 
         {canManage && (
           <>
-            <Text style={styles.sectionTitle}>Invite Friends</Text>
+            <Text style={styles.sectionTitle}>
+              Find Student
+            </Text>
+            <Text style={styles.sectionHelp}>
+              Search any Lit Chain reader by username.
+              They do not need to already be your friend.
+            </Text>
+
+            <View style={styles.searchRow}>
+              <TextInput
+                value={studentQuery}
+                onChangeText={setStudentQuery}
+                onSubmitEditing={searchStudent}
+                placeholder="@username"
+                autoCapitalize="none"
+                autoCorrect={false}
+                style={styles.searchInput}
+              />
+
+              <Pressable
+                disabled={
+                  studentSearching ||
+                  !studentQuery.trim()
+                }
+                onPress={searchStudent}
+                style={[
+                  styles.searchButton,
+                  (
+                    studentSearching ||
+                    !studentQuery.trim()
+                  ) &&
+                    styles.disabledButton
+                ]}
+              >
+                <Text style={styles.searchButtonText}>
+                  {studentSearching
+                    ? "Searching…"
+                    : "Find"}
+                </Text>
+              </Pressable>
+            </View>
+
+            {!!studentResult && (
+              <View style={styles.searchResult}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.memberName}>
+                    {memberName(studentResult)}
+                  </Text>
+                  {!!studentResult.username && (
+                    <Text style={styles.username}>
+                      @{studentResult.username}
+                    </Text>
+                  )}
+                </View>
+
+                <Pressable
+                  disabled={
+                    busyId ===
+                    String(
+                      studentResult.userId ||
+                      studentResult.id
+                    )
+                  }
+                  onPress={() =>
+                    invite(studentResult)
+                  }
+                  style={styles.inviteButton}
+                >
+                  <Text style={styles.inviteText}>
+                    Invite Student
+                  </Text>
+                </Pressable>
+              </View>
+            )}
+
+            <Text style={styles.sectionTitle}>
+              Invite Friends
+            </Text>
             {!friends.length ? (
-              <Text style={styles.empty}>No uninvited friends available.</Text>
+              <Text style={styles.empty}>
+                No uninvited friends available.
+              </Text>
             ) : (
               friends.map((friend) => {
-                const userId = String(friend.otherUserId || friend.id || "");
+                const userId = String(
+                  friend.otherUserId ||
+                  friend.id ||
+                  ""
+                );
+
                 return (
-                  <View key={userId} style={styles.inviteRow}>
-                    <Text style={styles.inviteName}>{memberName(friend)}</Text>
+                  <View
+                    key={userId}
+                    style={styles.inviteRow}
+                  >
+                    <Text style={styles.inviteName}>
+                      {memberName(friend)}
+                    </Text>
+
                     <Pressable
-                      disabled={busyId === userId}
-                      onPress={() => invite(friend)}
+                      disabled={
+                        busyId === userId
+                      }
+                      onPress={() =>
+                        invite(friend)
+                      }
                       style={styles.inviteButton}
                     >
-                      <Text style={styles.inviteText}>Invite</Text>
+                      <Text style={styles.inviteText}>
+                        Invite
+                      </Text>
                     </Pressable>
                   </View>
                 );
@@ -289,6 +440,55 @@ const styles = StyleSheet.create({
     marginBottom: 10
   },
   empty: { color: BRAND.muted },
+  sectionHelp: {
+    color: BRAND.muted,
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: -4,
+    marginBottom: 10
+  },
+  searchRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 10
+  },
+  searchInput: {
+    flex: 1,
+    minHeight: 46,
+    backgroundColor: BRAND.surface,
+    borderWidth: 1,
+    borderColor: BRAND.line,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    color: BRAND.ink
+  },
+  searchButton: {
+    minWidth: 86,
+    minHeight: 46,
+    borderRadius: 12,
+    backgroundColor: BRAND.teal,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12
+  },
+  searchButtonText: {
+    color: "#FFF",
+    fontWeight: "900"
+  },
+  disabledButton: {
+    opacity: 0.45
+  },
+  searchResult: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: BRAND.surface,
+    borderWidth: 1,
+    borderColor: BRAND.teal,
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 10
+  },
   inviteRow: {
     flexDirection: "row",
     alignItems: "center",

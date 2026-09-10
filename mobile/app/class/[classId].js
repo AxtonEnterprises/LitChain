@@ -12,6 +12,7 @@ import {
   Image,
   Pressable,
   SafeAreaView,
+  Share,
   StyleSheet,
   Text,
   View
@@ -243,6 +244,26 @@ export default function ClassHome() {
     [members]
   );
 
+  async function shareClassroom() {
+    const className =
+      classData?.name || "Lit Chain Classroom";
+
+    const classUrl =
+      `https://litchain.org/read/groups/${classId}`;
+
+    try {
+      await Share.share({
+        title: className,
+        message:
+          `${className}\n\nJoin or open this classroom on Lit Chain:\n${classUrl}`
+      });
+    } catch {
+      setStatus(
+        "The classroom could not be shared."
+      );
+    }
+  }
+
   function createAssignment() {
     router.push({
       pathname:
@@ -441,6 +462,19 @@ export default function ClassHome() {
               }
             >
               Students
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={shareClassroom}
+            style={styles.smallButton}
+          >
+            <Text
+              style={
+                styles.smallButtonText
+              }
+            >
+              Share
             </Text>
           </Pressable>
 
