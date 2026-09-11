@@ -41,19 +41,36 @@ function notificationTitle(item) {
     case "friend_request":
       return `${actor} sent you a friend request.`;
     case "group_invite":
-      return `${actor} invited you to a group.`;
+      return `${actor} invited you to ${item.groupName || "a group"}.`;
+    case "friend_accepted":
+      return `${actor} accepted your friend request.`;
+    case "group_invite_accepted":
+      return `${actor} accepted your group invitation.`;
+    case "group_join_approved":
+      return `Your request to join ${item.groupName || "a group"} was approved.`;
+    case "group_role_changed":
+      return `Your role changed in ${item.groupName || "a group"}.`;
     case "forum_reply":
       return `${actor} replied in ${item.groupName || "a group"}.`;
     case "chain_reply":
       return `${actor} replied to your Chain entry.`;
+    case "group_chain_reply":
+      return `${actor} replied to a group Chain entry in ${item.groupName || "your group"}.`;
     case "assignment":
     case "class_assignment":
       return `Class activity in ${item.groupName || "your class"}.`;
     case "grade":
     case "class_grade":
       return `A grade was updated in ${item.groupName || "your class"}.`;
-    default:
-      return "You have a new Lit Chain notification.";
+    default: {
+      const readableType = String(item.type || "")
+        .replaceAll("_", " ")
+        .trim();
+
+      return readableType
+        ? `${readableType.charAt(0).toUpperCase()}${readableType.slice(1)}.`
+        : "You have a new Lit Chain notification.";
+    }
   }
 }
 

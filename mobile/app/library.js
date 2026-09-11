@@ -18,6 +18,7 @@ import {
 } from "react-native";
 
 import { router } from "expo-router";
+import { signOut } from "firebase/auth";
 
 import AppHeader from "../components/AppHeader";
 import BottomNav from "../components/BottomNav";
@@ -48,6 +49,10 @@ import {
 } from "../../shared/groupAvatars";
 
 import { BRAND } from "../../shared/brand";
+import { auth } from "../lib/firebase";
+import {
+  getMyNativePlatformRole
+} from "../services/platformModeration";
 
 export default function LibraryScreen() {
   const [tab, setTab] =
@@ -70,15 +75,29 @@ export default function LibraryScreen() {
   const [friendBusyId, setFriendBusyId] =
     useState("");
 
+  const [platformRole, setPlatformRole] =
+    useState(null);
+
   async function load() {
     try {
       setLoading(true);
-      setBundle(
-        await getNativeLibraryBundle()
-      );
+
+      const [nextBundle, nextRole] =
+        await Promise.all([
+          getNativeLibraryBundle(),
+          getMyNativePlatformRole().catch(() => null)
+        ]);
+
+      setBundle(nextBundle);
+      setPlatformRole(nextRole);
     } finally {
       setLoading(false);
     }
+  }
+
+  async function logout() {
+    await signOut(auth);
+    router.replace("/login");
   }
 
   useEffect(() => {
@@ -513,6 +532,33 @@ export default function LibraryScreen() {
                         </View>
                       )
                     )}
+                  </View>
+
+                  <View style={styles.accountActions}>
+                    {platformRole?.isPlatformModerator && (
+                      <Pressable
+                        onPress={() =>
+                          router.push("/moderation")
+                        }
+                        style={styles.accountButton}
+                      >
+                        <Text style={styles.accountButtonText}>
+                          Platform Moderation
+                        </Text>
+                      </Pressable>
+                    )}
+
+                    <Pressable
+                      onPress={logout}
+                      style={[
+                        styles.accountButton,
+                        styles.signOutButton
+                      ]}
+                    >
+                      <Text style={styles.signOutText}>
+                        Sign Out
+                      </Text>
+                    </Pressable>
                   </View>
                 </>
               )}
@@ -1357,4 +1403,33 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 12
   }
+  accountActions: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 10,
+    marginBottom: 8
+  },
+  accountButton: {
+    flex: 1,
+    minHeight: 42,
+    borderWidth: 1,
+    borderColor: BRAND.teal,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 10
+  },
+  accountButtonText: {
+    color: BRAND.tealDark,
+    fontWeight: "900",
+    fontSize: 12
+  },
+  signOutButton: {
+    borderColor: BRAND.line
+  },
+  signOutText: {
+    color: BRAND.danger,
+    fontWeight: "900",
+    fontSize: 12
+  },
 });
