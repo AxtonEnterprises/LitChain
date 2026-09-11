@@ -15,6 +15,7 @@ import {
   updateNativeGroupMemberRole
 } from "./groupMembership";
 import { getNativeFriends } from "./social";
+import { createNativeNotification } from "./notifications";
 
 function requireUser() {
   const user = auth.currentUser;
@@ -84,7 +85,13 @@ export async function getGeneralClassDiscussion(classId) {
   requireUser();
 
   const fixed = await getDoc(
-    doc(db, "groups", String(classId), "forumPosts", "general-class-discussion")
+    doc(
+      db,
+      "groups",
+      String(classId),
+      "forumPosts",
+      "general-class-discussion"
+    )
   );
 
   if (fixed.exists()) return { id: fixed.id, ...fixed.data() };
@@ -97,7 +104,8 @@ export async function getGeneralClassDiscussion(classId) {
     const data = item.data();
     return (
       data.isGeneralClassDiscussion === true ||
-      String(data.title || "").trim().toLowerCase() === "general class discussion"
+      String(data.title || "").trim().toLowerCase() ===
+        "general class discussion"
     );
   });
 
@@ -116,7 +124,13 @@ export async function ensureNativeGeneralClassDiscussion(classId) {
   if (existing) return existing;
 
   const now = new Date().toISOString();
-  const ref = doc(db, "groups", String(classId), "forumPosts", "general-class-discussion");
+  const ref = doc(
+    db,
+    "groups",
+    String(classId),
+    "forumPosts",
+    "general-class-discussion"
+  );
 
   const payload = {
     id: "general-class-discussion",
@@ -145,7 +159,22 @@ export async function inviteNativeClassFriend(classId, userId) {
   const cleanClassId = String(classId || "");
   const cleanUserId = String(userId || "");
 
-  if (!cleanClassId || !cleanUserId) throw new Error("Missing class or student.");
+  if (!cleanClassId || !cleanUserId) {
+    throw new Error("Missing class or student.");
+  }
+
+  const classSnapshot = await getDoc(
+    doc(db, "groups", cleanClassId)
+  );
+
+  if (!classSnapshot.exists()) {
+    throw new Error("Class not found.");
+  }
+
+  const classData = classSnapshot.data();
+  if (classData.type !== "class") {
+    throw new Error("This item is not a class.");
+  }
 
   const now = new Date().toISOString();
 
@@ -156,10 +185,27 @@ export async function inviteNativeClassFriend(classId, userId) {
       groupId: cleanClassId,
       status: "pending",
       invitedBy: user.uid,
+      createdAtISO: now,
+      updatedAtISO: now,
       invitedAtISO: now,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
       invitedAt: serverTimestamp()
-    }
+    },
+    { merge: true }
   );
+
+  await createNativeNotification({
+    recipientUserId: cleanUserId,
+    type: "group_invite",
+    actorUserId: user.uid,
+    groupId: cleanClassId,
+    groupName: classData.name || "",
+    targetPath: "/read/profile?tab=groups",
+    message: `You were invited to the classroom ${
+      classData.name || "Classroom"
+    }.`
+  });
 
   return true;
 }
@@ -182,7 +228,11 @@ export async function setNativeClassRole(classId, userId, classRole) {
 
 export async function removeNativeClassMember(classId, userId) {
   requireUser();
-  await deleteDoc(doc(db, "groups", String(classId), "members", String(userId)));
+
+  await deleteDoc(
+    doc(db, "groups", String(classId), "members", String(userId))
+  );
+
   return true;
 }
 
@@ -199,13 +249,23 @@ export async function saveNativeClassSettings(
   requireUser();
 
   const cleanName = String(name || "").trim();
-  if (cleanName.length < 2) throw new Error("Enter a class name.");
+  if (cleanName.length < 2) {
+    throw new Error("Enter a class name.");
+  }
 
-  const safeVisibility = ["private", "discoverable", "public"].includes(visibility)
+  const safeVisibility = [
+    "private",
+    "discoverable",
+    "public"
+  ].includes(visibility)
     ? visibility
     : "private";
 
-  const safeJoinPolicy = ["invite_only", "request_to_join", "open"].includes(joinPolicy)
+  const safeJoinPolicy = [
+    "invite_only",
+    "request_to_join",
+    "open"
+  ].includes(joinPolicy)
     ? joinPolicy
     : "invite_only";
 
