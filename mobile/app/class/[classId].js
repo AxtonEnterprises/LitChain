@@ -830,7 +830,34 @@ export default function ClassHome() {
                       </Text>
                     </Pressable>
 
-                    {canTeach && (
+                    <Pressable
+                    onPress={() =>
+                      router.push({
+                        pathname:
+                          "/class/assignment-discussions",
+                        params: {
+                          classId,
+                          assignmentId:
+                            item.id,
+                          assignmentTitle:
+                            item.title
+                        }
+                      })
+                    }
+                    style={
+                      styles.secondaryButton
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.secondaryButtonText
+                      }
+                    >
+                      Discussions
+                    </Text>
+                  </Pressable>
+
+                  {canTeach && (
                       <View
                         style={
                           styles.teacherActions
