@@ -1,12 +1,15 @@
 import {
+  collection,
   deleteDoc,
   doc,
   getDoc,
+  getDocs,
   serverTimestamp,
-  updateDoc
+  updateDoc,
+  writeBatch
 } from "firebase/firestore";
 
-import { db } from "../lib/firebase";
+import { auth, db } from "../lib/firebase";
 
 export async function getNativeGroupSettings(groupId) {
   const snapshot = await getDoc(
@@ -110,4 +113,55 @@ export async function deleteNativeGroupPost(
       String(postId)
     )
   );
+}
+
+
+export async function deleteNativeGroup(groupId) {
+  const user = auth.currentUser;
+  if (!user) throw new Error("You must be logged in.");
+
+  const id = String(groupId || "");
+  const groupRef = doc(db, "groups", id);
+  const groupSnap = await getDoc(groupRef);
+  if (!groupSnap.exists()) return;
+  if (groupSnap.data()?.ownerId !== user.uid) {
+    throw new Error("Only the owner can delete this group or class.");
+  }
+
+  // Remove all direct membership/governance/content records in the same
+  // atomic write as the parent. This is important for the protected
+  // General Class Discussion and prevents stale memberships after deletion.
+  const directCollections = [
+    "members",
+    "invites",
+    "joinRequests",
+    "forumPosts",
+    "forumVotes",
+    "moderationReports",
+    "moderationActions",
+    "bans",
+    "assignments",
+    "studentProgress",
+    "shareInvite"
+  ];
+
+  const snapshots = await Promise.all(
+    directCollections.map((name) =>
+      getDocs(collection(db, "groups", id, name))
+    )
+  );
+
+  const count = snapshots.reduce((total, snap) => total + snap.size, 0);
+  if (count + 1 > 450) {
+    throw new Error(
+      "This group is too large for safe in-app deletion. Please contact Lit Chain support."
+    );
+  }
+
+  const batch = writeBatch(db);
+  snapshots.forEach((snap) => {
+    snap.docs.forEach((child) => batch.delete(child.ref));
+  });
+  batch.delete(groupRef);
+  await batch.commit();
 }
