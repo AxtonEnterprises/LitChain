@@ -1,5 +1,5 @@
 export const BRAND = Object.freeze({
-  // Matches current Lit Chain PWA palette
+  // Canonical Lit Chain palette. Keep this aligned with src/styles/global.css :root.
   teal: "#2F8E9C",
   tealDark: "#2F8E9C",
   yellow: "#C9962A",
