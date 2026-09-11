@@ -1,5 +1,6 @@
 import {
   useCallback,
+  useEffect,
   useMemo,
   useState
 } from "react";
@@ -173,6 +174,21 @@ export default function TestReview() {
         selectedId
       ]
     );
+
+  useEffect(() => {
+    if (!selected) {
+      setManualScores({});
+      setFeedback("");
+      return;
+    }
+
+    setManualScores(
+      selected.manualScores || {}
+    );
+    setFeedback(
+      selected.feedback || ""
+    );
+  }, [selectedId, selected]);
 
   function choose(submission) {
     const id =
