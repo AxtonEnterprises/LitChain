@@ -11,7 +11,6 @@ import {
   Modal,
   Pressable,
   SafeAreaView,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -30,15 +29,11 @@ import {
 
 import {
   cancelNativeFriendRequest,
-  findNativeReaderByUsername,
   removeNativeFriend,
   respondNativeFriendRequest,
+  searchNativeReadersByUsername,
   sendNativeFriendRequest
 } from "../services/librarySocial";
-
-import {
-  getNativeProfileBadges
-} from "../services/profileBadges";
 
 import {
   LIBRARY_TABS
@@ -66,12 +61,14 @@ export default function LibraryScreen() {
     useState(false);
   const [friendQuery, setFriendQuery] =
     useState("");
-  const [friendResult, setFriendResult] =
-    useState(null);
+  const [friendResults, setFriendResults] =
+    useState([]);
   const [friendStatus, setFriendStatus] =
     useState("");
   const [friendSearching, setFriendSearching] =
     useState(false);
+  const [friendBusyId, setFriendBusyId] =
+    useState("");
 
   async function load() {
     try {
@@ -85,36 +82,36 @@ export default function LibraryScreen() {
   }
 
   useEffect(() => {
-    load();
+    void load();
   }, []);
 
   const items = useMemo(() => {
     if (!bundle) return [];
 
     if (tab === "timeline") {
-      return bundle.timeline;
+      return bundle.timeline || [];
     }
 
     if (tab === "journal") {
-      return bundle.journal;
+      return bundle.journal || [];
     }
 
     if (tab === "friends") {
-      return bundle.friends;
+      return bundle.friends || [];
     }
 
     if (tab === "groups") {
-      return bundle.groups;
+      return bundle.groups || [];
     }
 
     return [
-      ...bundle.savedBooks.map(
+      ...(bundle.savedBooks || []).map(
         (item) => ({
           ...item,
           savedType: "book"
         })
       ),
-      ...bundle.savedChain.map(
+      ...(bundle.savedChain || []).map(
         (item) => ({
           ...item,
           savedType: "chain"
@@ -123,35 +120,39 @@ export default function LibraryScreen() {
     ];
   }, [bundle, tab]);
 
-  const badges =
-    getNativeProfileBadges(bundle);
-
   function openItem(item) {
     if (tab === "journal") {
       router.push({
-        pathname:
-          "/journal/[entryId]",
+        pathname: "/journal/[entryId]",
         params: {
           entryId: item.id
         }
       });
-
       return;
     }
 
     if (tab === "groups") {
-      router.push({
-        pathname:
-          "/group/[groupId]",
-        params: {
-          groupId: item.id,
-          name:
-            item.name || "Group",
-          role:
-            item.membership?.role ||
-            ""
-        }
-      });
+      if (item.type === "class") {
+        router.push({
+          pathname: "/class/[classId]",
+          params: {
+            classId: item.id,
+            name: item.name || "Class",
+            role:
+              item.membership?.role || ""
+          }
+        });
+      } else {
+        router.push({
+          pathname: "/group/[groupId]",
+          params: {
+            groupId: item.id,
+            name: item.name || "Group",
+            role:
+              item.membership?.role || ""
+          }
+        });
+      }
 
       return;
     }
@@ -165,39 +166,71 @@ export default function LibraryScreen() {
 
     if (bookLike) {
       router.push({
-        pathname:
-          "/reader/[bookId]",
+        pathname: "/reader/[bookId]",
         params: {
-          bookId:
-            String(
-              item.bookId ||
-              item.id
-            ),
-          title:
-            item.title || "Book",
-          author:
-            item.author || ""
+          bookId: String(
+            item.bookId || item.id
+          ),
+          title: item.title || "Book",
+          author: item.author || ""
         }
       });
     }
   }
 
   async function searchFriend() {
+    const term = friendQuery.trim();
+
+    if (term.length < 2) {
+      setFriendStatus(
+        "Enter at least 2 characters."
+      );
+      setFriendResults([]);
+      return;
+    }
+
     try {
       setFriendSearching(true);
       setFriendStatus("");
-      setFriendResult(null);
 
-      const result =
-        await findNativeReaderByUsername(
-          friendQuery
+      const results =
+        await searchNativeReadersByUsername(
+          term,
+          15
         );
 
-      setFriendResult(result);
+      const selfId =
+        bundle?.profile?.uid ||
+        bundle?.profile?.id ||
+        "";
 
-      if (!result) {
+      const currentFriendIds = new Set(
+        (bundle?.friends || []).map(
+          (friend) =>
+            String(
+              friend.otherUserId ||
+              friend.id
+            )
+        )
+      );
+
+      const filtered = results.filter(
+        (reader) =>
+          String(
+            reader.userId || reader.id
+          ) !== String(selfId) &&
+          !currentFriendIds.has(
+            String(
+              reader.userId || reader.id
+            )
+          )
+      );
+
+      setFriendResults(filtered);
+
+      if (!filtered.length) {
         setFriendStatus(
-          "No reader found."
+          "No matching readers found."
         );
       }
     } catch (error) {
@@ -210,23 +243,45 @@ export default function LibraryScreen() {
     }
   }
 
-  async function addFriend() {
-    if (!friendResult?.id) return;
+  async function addFriend(reader) {
+    const userId = String(
+      reader.userId || reader.id || ""
+    );
+
+    if (!userId) return;
 
     try {
+      setFriendBusyId(userId);
+
       await sendNativeFriendRequest(
-        friendResult.id
+        userId
       );
 
       setFriendStatus(
-        "Friend request sent."
+        `Friend request sent to ${
+          reader.displayName ||
+          reader.username ||
+          "Reader"
+        }.`
       );
+
+      setFriendResults((current) =>
+        current.filter(
+          (item) =>
+            String(
+              item.userId || item.id
+            ) !== userId
+        )
+      );
+
       await load();
     } catch (error) {
       setFriendStatus(
         error?.message ||
           "Could not send request."
       );
+    } finally {
+      setFriendBusyId("");
     }
   }
 
@@ -356,12 +411,9 @@ export default function LibraryScreen() {
                     {profileImage ? (
                       <Image
                         source={{
-                          uri:
-                            profileImage
+                          uri: profileImage
                         }}
-                        style={
-                          styles.avatar
-                        }
+                        style={styles.avatar}
                       />
                     ) : (
                       <View
@@ -428,7 +480,12 @@ export default function LibraryScreen() {
                       </Text>
                     </View>
                   </Pressable>
-                  <View style={styles.profileStats}>
+
+                  <View
+                    style={
+                      styles.profileStats
+                    }
+                  >
                     {profileStats.map(
                       (stat) => (
                         <View
@@ -439,10 +496,18 @@ export default function LibraryScreen() {
                             name={stat.icon}
                             size={19}
                           />
-                          <Text style={styles.statNumber}>
+                          <Text
+                            style={
+                              styles.statNumber
+                            }
+                          >
                             {stat.value}
                           </Text>
-                          <Text style={styles.statLabel}>
+                          <Text
+                            style={
+                              styles.statLabel
+                            }
+                          >
                             {stat.label}
                           </Text>
                         </View>
@@ -459,9 +524,11 @@ export default function LibraryScreen() {
                 }
               >
                 <Pressable
-                  onPress={() =>
-                    setFriendModal(true)
-                  }
+                  onPress={() => {
+                    setFriendModal(true);
+                    setFriendStatus("");
+                    setFriendResults([]);
+                  }}
                   style={
                     styles.primaryAction
                   }
@@ -479,9 +546,7 @@ export default function LibraryScreen() {
                   ?.incoming?.map(
                     (request) => (
                       <View
-                        key={
-                          request.id
-                        }
+                        key={request.id}
                         style={
                           styles.requestCard
                         }
@@ -491,11 +556,9 @@ export default function LibraryScreen() {
                             styles.requestName
                           }
                         >
-                          {request
-                            .profile
+                          {request.profile
                             ?.displayName ||
-                            request
-                              .profile
+                            request.profile
                               ?.username ||
                             "Reader"}
                         </Text>
@@ -547,9 +610,7 @@ export default function LibraryScreen() {
                   ?.outgoing?.map(
                     (request) => (
                       <View
-                        key={
-                          request.id
-                        }
+                        key={request.id}
                         style={
                           styles.requestCard
                         }
@@ -560,11 +621,9 @@ export default function LibraryScreen() {
                           }
                         >
                           Request sent to{" "}
-                          {request
-                            .profile
+                          {request.profile
                             ?.displayName ||
-                            request
-                              .profile
+                            request.profile
                               ?.username ||
                             "Reader"}
                         </Text>
@@ -780,13 +839,10 @@ export default function LibraryScreen() {
                 <Text
                   style={styles.detail}
                 >
-                  {item.membership?.role ||
-                    (
-                      item.type ===
-                      "class"
-                        ? "Class"
-                        : "Reading Group"
-                    )}
+                  {item.type === "class"
+                    ? "Class"
+                    : item.membership?.role ||
+                      "Reading Group"}
                   {" · Tap to open"}
                 </Text>
               )}
@@ -804,85 +860,156 @@ export default function LibraryScreen() {
           setFriendModal(false)
         }
       >
-        <SafeAreaView style={styles.friendModalPage}>
-          <View style={styles.friendModalHeader}>
-            <Text style={styles.popupTitle}>
+        <SafeAreaView
+          style={
+            styles.friendModalPage
+          }
+        >
+          <View
+            style={
+              styles.friendModalHeader
+            }
+          >
+            <Text
+              style={styles.popupTitle}
+            >
               Find Reader
             </Text>
+
             <Pressable
               onPress={() =>
                 setFriendModal(false)
               }
+              style={styles.closeButton}
             >
-              <Text style={styles.closeText}>
+              <Text
+                style={styles.closeText}
+              >
                 ×
               </Text>
             </Pressable>
           </View>
 
           <View style={styles.friendPopup}>
-            <TextInput
-              value={friendQuery}
-              onChangeText={setFriendQuery}
-              placeholder="Exact username"
-              autoCapitalize="none"
-              style={styles.searchInput}
-              onSubmitEditing={
-                searchFriend
-              }
-            />
+            <Text style={styles.searchHelp}>
+              Search by partial or full username.
+            </Text>
 
-            <Pressable
-              onPress={searchFriend}
-              style={
-                styles.primaryAction
-              }
-            >
-              <Text
-                style={
-                  styles.primaryActionText
+            <View style={styles.friendSearchRow}>
+              <TextInput
+                autoFocus
+                value={friendQuery}
+                onChangeText={setFriendQuery}
+                placeholder="Username"
+                autoCapitalize="none"
+                autoCorrect={false}
+                style={styles.searchInput}
+                onSubmitEditing={
+                  searchFriend
                 }
-              >
-                Search
-              </Text>
-            </Pressable>
-
-            {friendSearching && (
-              <ActivityIndicator
-                size="large"
-                style={{ marginTop: 24 }}
               />
-            )}
 
-            {!!friendResult && (
-              <View
-                style={
-                  styles.friendResult
+              <Pressable
+                disabled={
+                  friendSearching ||
+                  friendQuery.trim().length < 2
                 }
+                onPress={searchFriend}
+                style={[
+                  styles.friendSearchButton,
+                  (
+                    friendSearching ||
+                    friendQuery.trim().length < 2
+                  ) &&
+                    styles.friendSearchButtonDisabled
+                ]}
               >
                 <Text
                   style={
-                    styles.requestName
+                    styles.primaryActionText
                   }
                 >
-                  {friendResult
-                    .displayName ||
-                    friendResult
-                      .username ||
-                    "Reader"}
+                  {friendSearching
+                    ? "…"
+                    : "Search"}
                 </Text>
+              </Pressable>
+            </View>
 
-                <Pressable
-                  onPress={addFriend}
-                >
-                  <Text
-                    style={styles.accept}
-                  >
-                    Add Friend
-                  </Text>
-                </Pressable>
-              </View>
+            {friendSearching && (
+              <ActivityIndicator
+                size="small"
+                style={{ marginTop: 14 }}
+              />
             )}
+
+            <FlatList
+              data={friendResults}
+              keyExtractor={(item) =>
+                String(
+                  item.userId || item.id
+                )
+              }
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={
+                styles.friendResultsList
+              }
+              renderItem={({ item }) => {
+                const userId = String(
+                  item.userId || item.id
+                );
+
+                return (
+                  <View
+                    style={
+                      styles.friendResult
+                    }
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={
+                          styles.requestName
+                        }
+                      >
+                        {item.displayName ||
+                          item.username ||
+                          "Reader"}
+                      </Text>
+
+                      {!!item.username && (
+                        <Text
+                          style={
+                            styles.resultUsername
+                          }
+                        >
+                          @{item.username}
+                        </Text>
+                      )}
+                    </View>
+
+                    <Pressable
+                      disabled={
+                        friendBusyId === userId
+                      }
+                      onPress={() =>
+                        addFriend(item)
+                      }
+                      style={
+                        styles.addFriendButton
+                      }
+                    >
+                      <Text
+                        style={
+                          styles.addFriendButtonText
+                        }
+                      >
+                        Add
+                      </Text>
+                    </Pressable>
+                  </View>
+                );
+              }}
+            />
 
             {!!friendStatus && (
               <Text
@@ -1019,25 +1146,6 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     marginTop: 2
   },
-  badges: {
-    gap: 8,
-    paddingBottom: 12
-  },
-  badge: {
-    minWidth: 118,
-    backgroundColor: "#FFF8DF",
-    borderRadius: 14,
-    padding: 11
-  },
-  badgeTitle: {
-    color: BRAND.ink,
-    fontWeight: "900"
-  },
-  badgeDetail: {
-    color: BRAND.muted,
-    fontSize: 10,
-    marginTop: 3
-  },
   sectionActions: {
     marginBottom: 12
   },
@@ -1047,7 +1155,6 @@ const styles = StyleSheet.create({
     marginBottom: 12
   },
   primaryAction: {
-    flex: 1,
     minHeight: 44,
     paddingHorizontal: 12,
     borderRadius: 12,
@@ -1165,37 +1272,85 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between"
   },
+  popupTitle: {
+    color: BRAND.ink,
+    fontSize: 20,
+    fontWeight: "900"
+  },
+  closeButton: {
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center"
+  },
   closeText: {
     color: BRAND.ink,
     fontSize: 30
   },
   friendPopup: {
     flex: 1,
-    backgroundColor: BRAND.background,
     padding: 18
   },
-  popupTitle: {
-    color: BRAND.ink,
-    fontSize: 20,
-    fontWeight: "900",
-    marginBottom: 12
+  searchHelp: {
+    color: BRAND.muted,
+    fontSize: 12,
+    marginBottom: 10
+  },
+  friendSearchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8
   },
   searchInput: {
-    minHeight: 46,
+    flex: 1,
+    minHeight: 48,
+    backgroundColor: BRAND.surface,
     borderWidth: 1,
     borderColor: BRAND.line,
     borderRadius: 12,
     paddingHorizontal: 12,
-    marginBottom: 10
+    color: BRAND.ink
+  },
+  friendSearchButton: {
+    width: 96,
+    minHeight: 48,
+    borderRadius: 12,
+    backgroundColor: BRAND.teal,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  friendSearchButtonDisabled: {
+    opacity: 0.45
+  },
+  friendResultsList: {
+    paddingTop: 12,
+    paddingBottom: 30
   },
   friendResult: {
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: BRAND.line,
+    backgroundColor: BRAND.surface,
+    borderWidth: 1,
+    borderColor: BRAND.line,
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 8,
     flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center"
+    alignItems: "center",
+    gap: 10
+  },
+  resultUsername: {
+    color: BRAND.muted,
+    fontSize: 12,
+    marginTop: 2
+  },
+  addFriendButton: {
+    backgroundColor: BRAND.teal,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 9
+  },
+  addFriendButtonText: {
+    color: "#FFF",
+    fontWeight: "900"
   },
   friendStatus: {
     color: BRAND.muted,
