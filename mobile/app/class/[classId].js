@@ -497,6 +497,25 @@ export default function ClassHome() {
             </Text>
           </Pressable>
 
+          <Pressable
+            onPress={() =>
+              router.push({
+                pathname:
+                  "/class/tests",
+                params: { classId }
+              })
+            }
+            style={styles.smallButton}
+          >
+            <Text
+              style={
+                styles.smallButtonText
+              }
+            >
+              Tests
+            </Text>
+          </Pressable>
+
           {canManageClass(role) && (
             <Pressable
               onPress={() =>
