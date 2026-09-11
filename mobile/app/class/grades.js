@@ -12,6 +12,7 @@ import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 
 import BottomNav from "../../components/BottomNav";
 import { BRAND } from "../../../shared/brand";
+import useRefreshOnAppActive from "../../hooks/useRefreshOnAppActive";
 import {
   canTeachClass,
   classRoleLabel,
@@ -152,6 +153,8 @@ export default function ClassGrades() {
   }, [classId]);
 
   useFocusEffect(useCallback(() => { void load(); }, [load]));
+
+  useRefreshOnAppActive(load);
 
   const role = classData?.membership?.role || "member";
   const canTeach = canTeachClass(role);

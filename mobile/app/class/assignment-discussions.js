@@ -20,6 +20,7 @@ import {
 
 import BottomNav from "../../components/BottomNav";
 import { BRAND } from "../../../shared/brand";
+import useRefreshOnAppActive from "../../hooks/useRefreshOnAppActive";
 
 import {
   createNativeAssignmentDiscussion,
@@ -67,6 +68,8 @@ export default function AssignmentDiscussions() {
       void load();
     }, [load])
   );
+
+  useRefreshOnAppActive(load);
 
   async function create() {
     try {
