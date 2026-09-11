@@ -913,7 +913,7 @@ const styles = StyleSheet.create({
   primaryButton: {
     minHeight: 46,
     borderRadius: 12,
-    backgroundColor: BRAND.teal,
+    backgroundColor: BRAND.primary,
     alignItems: "center",
     justifyContent: "center",
     marginTop: 16
@@ -957,7 +957,7 @@ const styles = StyleSheet.create({
     minHeight: 36,
     paddingHorizontal: 12,
     borderRadius: 999,
-    backgroundColor: BRAND.teal,
+    backgroundColor: BRAND.primary,
     alignItems: "center",
     justifyContent: "center"
   },
