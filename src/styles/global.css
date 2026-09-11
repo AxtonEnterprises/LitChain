@@ -2836,7 +2836,7 @@ p {
 }
 
 .profile-avatar-option.selected {
-  border-color: var(--teal, #3bb6b1);
+  border-color: var(--teal, #2f8e9c);
 
   background:
     rgba(59, 182, 177, 0.08);
@@ -2926,7 +2926,7 @@ p {
 
   margin: 0;
 
-  accent-color: var(--teal, #3bb6b1);
+  accent-color: var(--teal, #2f8e9c);
 }
 
 .profile-presence-toggle span {
@@ -3015,7 +3015,7 @@ p {
   font-weight: 700;
 
   color:
-    var(--teal, #3bb6b1);
+    var(--teal, #2f8e9c);
 }
 
 .readers-here-popover {
@@ -3223,7 +3223,7 @@ p {
     1rem;
 
   border-left: 4px solid
-    var(--teal, #3bb6b1);
+    var(--teal, #2f8e9c);
 
   background:
     rgba(59, 182, 177, 0.05);
@@ -3271,7 +3271,7 @@ p {
   gap: 0.4rem;
 
   color:
-    var(--teal, #3bb6b1);
+    var(--teal, #2f8e9c);
 
   font-weight: 700;
 
@@ -3741,7 +3741,7 @@ p {
   height: 18px;
   padding: 0 5px;
   border-radius: 999px;
-  background: #ffc00e;
+  background: #c9962a;
   color: #0d3852;
   font-size: 10px;
   font-weight: 800;
@@ -3854,7 +3854,7 @@ p {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: #3bb6b1;
+  background: #2f8e9c;
 }
 
 .notifications-empty {
@@ -9838,4 +9838,24 @@ body.reader-mode .random-reads-app {
 body.reader-mode .lit-chain-app {
   min-height: 100dvh;
   padding-bottom: 0 !important;
+}
+
+
+/* ==================================================
+   RC2A — GROUP SUBVIEW / BRAND PARITY
+   ================================================== */
+
+/* The sticky identity card was covering Settings/Moderation headings on
+   mobile when a group sub-card was rendered. Keep it in normal flow. */
+.group-floating-card {
+  position: relative;
+  top: auto;
+}
+
+/* Keep legacy group/class accents on the canonical Lit Chain palette. */
+.groups-home-page,
+.group-spatial-page,
+.classroom-page {
+  --teal: var(--primary);
+  --gold: var(--secondary);
 }
