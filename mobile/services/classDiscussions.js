@@ -30,6 +30,26 @@ async function requireClassMembership(classId) {
     throw new Error("You are not an active member of this class.");
   }
 
+  return {
+    user,
+    membership: snapshot.data()
+  };
+}
+
+async function requireClassTeacher(classId) {
+  const { user, membership } =
+    await requireClassMembership(classId);
+
+  if (
+    !["owner", "admin", "moderator"].includes(
+      String(membership?.role || "")
+    )
+  ) {
+    throw new Error(
+      "Only teachers and aides can start class discussions."
+    );
+  }
+
   return user;
 }
 
@@ -66,7 +86,7 @@ export async function createNativeAssignmentDiscussion({
   title,
   body
 }) {
-  const user = await requireClassMembership(classId);
+  const user = await requireClassTeacher(classId);
   const cleanTitle = String(title || "").trim();
   const cleanBody = String(body || "").trim();
 
