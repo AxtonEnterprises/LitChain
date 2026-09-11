@@ -156,15 +156,32 @@ export async function joinNativeGroup(group) {
     throw new Error("Missing group ID.");
   }
 
-  if (group.joinPolicy === "request_to_join") {
-    const isDiscoverable =
-      group.discoverable === true ||
-      group.visibility === "discoverable" ||
-      group.visibility === "public";
+  /*
+   * Never authorize from a potentially stale discovery card. Reload the
+   * current group/class metadata immediately before the membership write.
+   */
+  const groupSnapshot = await getDoc(
+    doc(db, "groups", groupId)
+  );
 
+  if (!groupSnapshot.exists()) {
+    throw new Error("This group or class is no longer available.");
+  }
+
+  const currentGroup = {
+    id: groupSnapshot.id,
+    ...groupSnapshot.data()
+  };
+
+  const isDiscoverable =
+    currentGroup.visibility === "discoverable" ||
+    currentGroup.visibility === "public" ||
+    currentGroup.discoverable === true;
+
+  if (currentGroup.joinPolicy === "request_to_join") {
     if (!isDiscoverable) {
       throw new Error(
-        group.type === "class"
+        currentGroup.type === "class"
           ? "This class must be Discoverable or Public before students can request to join."
           : "This group must be Discoverable or Public before readers can request to join."
       );
@@ -202,12 +219,11 @@ export async function joinNativeGroup(group) {
   }
 
   if (
-    group.joinPolicy !== "open" &&
-    group.visibility !== "public" &&
-    group.visibility !== "discoverable"
+    currentGroup.joinPolicy !== "open" ||
+    !isDiscoverable
   ) {
     throw new Error(
-      group.type === "class"
+      currentGroup.type === "class"
         ? "This class is invite only."
         : "This group is invite only."
     );
