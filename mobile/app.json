@@ -25,6 +25,7 @@
     },
     "ios": {
       "bundleIdentifier": "org.theliteraturefoundation.litchain",
+      "buildNumber": "1",
       "supportsTablet": true,
       "icon": "../public/branding/lit-chain-icon-512.png"
     },
