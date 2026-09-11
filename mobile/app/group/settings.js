@@ -5,6 +5,7 @@ import {
 } from "react";
 
 import {
+  Alert,
   FlatList,
   Image,
   Pressable,
@@ -26,6 +27,7 @@ import BottomNav from "../../components/BottomNav";
 import {
   getNativeGroupSettings,
   saveNativeGroupSettings,
+  deleteNativeGroup,
   deleteNativeGroupPost,
   setNativeGroupPostLocked,
   setNativeGroupPostPinned
@@ -176,6 +178,30 @@ export default function Settings() {
           "Could not save settings."
       );
     }
+  }
+
+
+  function confirmDeleteGroup() {
+    const label = group?.type === "class" ? "Class" : "Group";
+    Alert.alert(
+      `Delete ${label}`,
+      `Permanently delete “${group?.name || name || label}”? This cannot be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteNativeGroup(groupId);
+              router.replace("/groups");
+            } catch (error) {
+              setStatus(error?.message || `Could not delete ${label.toLowerCase()}.`);
+            }
+          }
+        }
+      ]
+    );
   }
 
   async function pin(post) {
@@ -491,6 +517,17 @@ export default function Settings() {
                 Save Group
               </Text>
             </Pressable>
+
+            {isOwner && (
+              <Pressable
+                onPress={confirmDeleteGroup}
+                style={styles.deleteGroupButton}
+              >
+                <Text style={styles.deleteGroupButtonText}>
+                  Delete {group?.type === "class" ? "Class" : "Group"}
+                </Text>
+              </Pressable>
+            )}
           </View>
         )}
 
@@ -985,6 +1022,19 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontStyle: "italic",
     lineHeight: 20
+  },
+  deleteGroupButton: {
+    marginTop: 12,
+    minHeight: 46,
+    borderWidth: 1,
+    borderColor: BRAND.danger,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  deleteGroupButtonText: {
+    color: BRAND.danger,
+    fontWeight: "900"
   },
   status: {
     color: BRAND.tealDark,
