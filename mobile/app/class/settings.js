@@ -227,7 +227,7 @@ const styles = StyleSheet.create({
   save: {
     minHeight: 48,
     borderRadius: 13,
-    backgroundColor: BRAND.teal,
+    backgroundColor: BRAND.primary,
     alignItems: "center",
     justifyContent: "center",
     marginTop: 22

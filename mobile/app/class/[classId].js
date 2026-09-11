@@ -1071,7 +1071,7 @@ const styles = StyleSheet.create({
     marginTop: 2
   },
   addButton: {
-    backgroundColor: BRAND.teal,
+    backgroundColor: BRAND.primary,
     borderRadius: 11,
     paddingHorizontal: 12,
     paddingVertical: 9
@@ -1111,7 +1111,7 @@ const styles = StyleSheet.create({
     marginTop: 8
   },
   emptyButton: {
-    backgroundColor: BRAND.teal,
+    backgroundColor: BRAND.primary,
     borderRadius: 12,
     paddingHorizontal: 15,
     paddingVertical: 10,
@@ -1192,7 +1192,7 @@ const styles = StyleSheet.create({
   readButton: {
     minHeight: 48,
     borderRadius: 13,
-    backgroundColor: BRAND.teal,
+    backgroundColor: BRAND.primary,
     alignItems: "center",
     justifyContent: "center"
   },

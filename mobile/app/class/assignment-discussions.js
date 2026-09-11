@@ -3,9 +3,7 @@ import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
-  KeyboardAvoidingView,
   Modal,
-  Platform,
   Pressable,
   SafeAreaView,
   StyleSheet,
@@ -184,51 +182,41 @@ export default function AssignmentDiscussions() {
         transparent
         onRequestClose={() => setComposerOpen(false)}
       >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={styles.modalKeyboard}
-        >
-          <View style={styles.modalBackdrop}>
-            <View style={styles.modalCard}>
-              <Text style={styles.modalTitle}>New Discussion</Text>
-              <Text style={styles.modalSub}>{assignmentTitle}</Text>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>New Discussion</Text>
+            <Text style={styles.modalSub}>{assignmentTitle}</Text>
 
-              <TextInput
-                value={title}
-                onChangeText={setTitle}
-                placeholder="Discussion title"
-                style={styles.input}
-              />
-              <TextInput
-                value={body}
-                onChangeText={setBody}
-                placeholder="What would you like to discuss?"
-                multiline
-                style={[styles.input, styles.bodyInput]}
-              />
+            <TextInput
+              value={title}
+              onChangeText={setTitle}
+              placeholder="Discussion title"
+              style={styles.input}
+            />
+            <TextInput
+              value={body}
+              onChangeText={setBody}
+              placeholder="What would you like to discuss?"
+              multiline
+              style={[styles.input, styles.bodyInput]}
+            />
 
-              <View style={styles.modalActions}>
-                <Pressable
-                  onPress={() => setComposerOpen(false)}
-                  style={styles.cancelButton}
-                >
-                  <Text style={styles.cancelText}>Cancel</Text>
-                </Pressable>
-
-                <Pressable
-                  disabled={saving || !title.trim() || !body.trim()}
-                  onPress={create}
-                  style={[
-                    styles.createButton,
-                    (saving || !title.trim() || !body.trim()) && styles.disabled
-                  ]}
-                >
-                  <Text style={styles.createText}>
-                    {saving ? "Posting…" : "Start Discussion"}
-                  </Text>
-                </Pressable>
-              </View>
+            <View style={styles.modalActions}>
+              <Pressable onPress={() => setComposerOpen(false)} style={styles.cancelButton}>
+                <Text style={styles.cancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                disabled={saving || !title.trim() || !body.trim()}
+                onPress={create}
+                style={[
+                  styles.createButton,
+                  (saving || !title.trim() || !body.trim()) && styles.disabled
+                ]}
+              >
+                <Text style={styles.createText}>{saving ? "Posting…" : "Start Discussion"}</Text>
+              </Pressable>
             </View>
+          </View>
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -255,7 +243,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
     paddingHorizontal: 13,
     borderRadius: 11,
-    backgroundColor: BRAND.teal,
+    backgroundColor: BRAND.primary,
     alignItems: "center",
     justifyContent: "center"
   },
@@ -280,7 +268,6 @@ const styles = StyleSheet.create({
   empty: { padding: 28, alignItems: "center" },
   emptyTitle: { color: BRAND.ink, fontSize: 21, fontWeight: "900" },
   emptyText: { color: BRAND.muted, marginTop: 6 },
-  modalKeyboard: { flex: 1 },
   modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.42)", justifyContent: "flex-end" },
   modalCard: {
     backgroundColor: BRAND.surface,
@@ -317,7 +304,7 @@ const styles = StyleSheet.create({
     flex: 2,
     minHeight: 48,
     borderRadius: 12,
-    backgroundColor: BRAND.teal,
+    backgroundColor: BRAND.primary,
     alignItems: "center",
     justifyContent: "center"
   },
