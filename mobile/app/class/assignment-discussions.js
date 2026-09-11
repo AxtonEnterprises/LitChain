@@ -20,14 +20,16 @@ import {
 
 import BottomNav from "../../components/BottomNav";
 import { BRAND } from "../../../shared/brand";
-import useRefreshOnAppActive from "../../hooks/useRefreshOnAppActive";
 
 import {
   createNativeAssignmentDiscussion,
   getNativeAssignmentDiscussions
 } from "../../services/classDiscussions";
 
-import { getNativeClass } from "../../services/classFoundation";
+import {
+  canTeachClass,
+  getNativeClass
+} from "../../services/classFoundation";
 
 export default function AssignmentDiscussions() {
   const params = useLocalSearchParams();
@@ -43,6 +45,9 @@ export default function AssignmentDiscussions() {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [saving, setSaving] = useState(false);
+
+  const canStartDiscussion =
+    canTeachClass(role);
 
   const load = useCallback(async () => {
     try {
@@ -68,8 +73,6 @@ export default function AssignmentDiscussions() {
       void load();
     }, [load])
   );
-
-  useRefreshOnAppActive(load);
 
   async function create() {
     try {
@@ -123,9 +126,16 @@ export default function AssignmentDiscussions() {
         </Pressable>
         <Text style={styles.eyebrow}>ASSIGNMENT DISCUSSIONS</Text>
         <Text numberOfLines={2} style={styles.title}>{assignmentTitle}</Text>
-        <Pressable onPress={() => setComposerOpen(true)} style={styles.newButton}>
-          <Text style={styles.newButtonText}>+ Discussion</Text>
-        </Pressable>
+        {canStartDiscussion && (
+          <Pressable
+            onPress={() => setComposerOpen(true)}
+            style={styles.newButton}
+          >
+            <Text style={styles.newButtonText}>
+              + Discussion
+            </Text>
+          </Pressable>
+        )}
       </View>
 
       {!!status && <Text style={styles.status}>{status}</Text>}
@@ -140,7 +150,11 @@ export default function AssignmentDiscussions() {
           ListEmptyComponent={
             <View style={styles.empty}>
               <Text style={styles.emptyTitle}>No discussions yet</Text>
-              <Text style={styles.emptyText}>Start a discussion about this assignment.</Text>
+              <Text style={styles.emptyText}>
+                {canStartDiscussion
+                  ? "Start a discussion about this assignment."
+                  : "Your teacher has not started a discussion for this assignment yet."}
+              </Text>
             </View>
           }
           renderItem={({ item }) => (
@@ -160,7 +174,7 @@ export default function AssignmentDiscussions() {
       )}
 
       <Modal
-        visible={composerOpen}
+        visible={composerOpen && canStartDiscussion}
         animationType="slide"
         transparent
         onRequestClose={() => setComposerOpen(false)}
