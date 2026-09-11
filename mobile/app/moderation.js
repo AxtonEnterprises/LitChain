@@ -311,6 +311,11 @@ export default function ModerationScreen() {
                     </Text>
                   )}
 
+                  {item.targetUserId && role?.userId === item.targetUserId ? (
+                    <Text style={styles.hierarchyNotice}>
+                      Reports involving your own account must be reviewed by a higher-ranked moderator.
+                    </Text>
+                  ) : (
                   <View style={styles.row}>
                     <Pressable
                       onPress={() =>
@@ -334,8 +339,9 @@ export default function ModerationScreen() {
                       </Text>
                     </Pressable>
                   </View>
+                  )}
 
-                  {role.isPlatformAdmin && (
+                  {role.isPlatformAdmin && item.targetUserId !== role?.userId && (
                     <>
                       <TextInput
                         value={reason}
@@ -628,6 +634,12 @@ const styles = StyleSheet.create({
     color: BRAND.ink,
     fontSize: 17,
     fontWeight: "900"
+  },
+  hierarchyNotice: {
+    color: BRAND.muted,
+    lineHeight: 19,
+    marginTop: 10,
+    fontWeight: "700"
   },
   muted: {
     color: BRAND.muted,

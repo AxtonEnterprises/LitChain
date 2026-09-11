@@ -143,6 +143,13 @@ export default function NotificationsScreen() {
       ? String(item.groupId)
       : "";
 
+    // Invitations must be accepted/declined from the Groups invitation tray
+    // before the destination group/class is opened.
+    if (item.type === "group_invite") {
+      router.push("/groups");
+      return;
+    }
+
     if (
       groupId &&
       ["class_assignment", "class_grade", "assignment", "grade"].includes(
