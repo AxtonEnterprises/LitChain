@@ -661,7 +661,7 @@ const styles = StyleSheet.create({
     marginTop: 12
   },
   primary: {
-    backgroundColor: BRAND.teal,
+    backgroundColor: BRAND.primary,
     borderRadius: 11,
     paddingHorizontal: 13,
     paddingVertical: 10,

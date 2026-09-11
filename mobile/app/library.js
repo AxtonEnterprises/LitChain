@@ -1204,7 +1204,7 @@ const styles = StyleSheet.create({
     minHeight: 44,
     paddingHorizontal: 12,
     borderRadius: 12,
-    backgroundColor: BRAND.teal,
+    backgroundColor: BRAND.primary,
     alignItems: "center",
     justifyContent: "center"
   },
@@ -1361,7 +1361,7 @@ const styles = StyleSheet.create({
     width: 96,
     minHeight: 48,
     borderRadius: 12,
-    backgroundColor: BRAND.teal,
+    backgroundColor: BRAND.primary,
     alignItems: "center",
     justifyContent: "center"
   },
@@ -1389,7 +1389,7 @@ const styles = StyleSheet.create({
     marginTop: 2
   },
   addFriendButton: {
-    backgroundColor: BRAND.teal,
+    backgroundColor: BRAND.primary,
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 9
@@ -1402,7 +1402,7 @@ const styles = StyleSheet.create({
     color: BRAND.muted,
     textAlign: "center",
     marginTop: 12
-  },
+  }
   accountActions: {
     flexDirection: "row",
     gap: 8,
