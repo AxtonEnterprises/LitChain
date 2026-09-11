@@ -2,6 +2,8 @@ export const BRAND = Object.freeze({
   // Canonical Lit Chain palette. Keep this aligned with src/styles/global.css :root.
   teal: "#2F8E9C",
   tealDark: "#2F8E9C",
+  // Primary CTAs match the PWA dark navy; teal remains the accent color.
+  primary: "#0B2D45",
   yellow: "#C9962A",
   ink: "#0B2D45",
   muted: "#61717C",
