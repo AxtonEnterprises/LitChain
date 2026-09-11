@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -17,6 +18,7 @@ import {
   getNativeClass,
   saveNativeClassSettings
 } from "../../services/classFoundation";
+import { deleteNativeGroup } from "../../services/groupAdmin";
 
 export default function ClassSettings() {
   const params = useLocalSearchParams();
@@ -46,32 +48,6 @@ export default function ClassSettings() {
       .finally(() => setLoading(false));
   }, [classId]);
 
-  function chooseVisibility(next) {
-    setVisibility(next);
-
-    /*
-     * Firestore only permits open/request enrollment on
-     * discoverable or public classes.
-     */
-    if (
-      next === "private" &&
-      ["open", "request_to_join"].includes(joinPolicy)
-    ) {
-      setJoinPolicy("invite_only");
-    }
-  }
-
-  function chooseJoinPolicy(next) {
-    setJoinPolicy(next);
-
-    if (
-      ["open", "request_to_join"].includes(next) &&
-      visibility === "private"
-    ) {
-      setVisibility("discoverable");
-    }
-  }
-
   async function save() {
     try {
       setSaving(true);
@@ -91,6 +67,29 @@ export default function ClassSettings() {
     } finally {
       setSaving(false);
     }
+  }
+
+
+  function confirmDeleteClass() {
+    Alert.alert(
+      "Delete Class",
+      `Permanently delete “${classData?.name || name || "this class"}”? This cannot be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteNativeGroup(classId);
+              router.replace("/groups");
+            } catch (error) {
+              setStatus(error?.message || "Could not delete class.");
+            }
+          }
+        }
+      ]
+    );
   }
 
   if (loading) {
@@ -145,7 +144,7 @@ export default function ClassSettings() {
               key={id}
               active={visibility === id}
               label={label}
-              onPress={() => chooseVisibility(id)}
+              onPress={() => setVisibility(id)}
             />
           ))}
         </View>
@@ -161,19 +160,20 @@ export default function ClassSettings() {
               key={id}
               active={joinPolicy === id}
               label={label}
-              onPress={() => chooseJoinPolicy(id)}
+              onPress={() => setJoinPolicy(id)}
             />
           ))}
         </View>
 
-        <Text style={styles.help}>
-          Request/Open enrollment requires a Discoverable or Public class.
-          Selecting either option will automatically make a Private class Discoverable.
-        </Text>
-
         <Pressable disabled={saving} onPress={save} style={styles.save}>
           <Text style={styles.saveText}>{saving ? "Saving…" : "Save Settings"}</Text>
         </Pressable>
+
+        {classData?.membership?.role === "owner" && (
+          <Pressable onPress={confirmDeleteClass} style={styles.deleteClass}>
+            <Text style={styles.deleteClassText}>Delete Class</Text>
+          </Pressable>
+        )}
 
         {!!status && <Text style={styles.status}>{status}</Text>}
       </ScrollView>
@@ -224,12 +224,6 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: BRAND.teal, borderColor: BRAND.teal },
   chipText: { color: BRAND.ink, fontWeight: "800" },
   chipTextActive: { color: "#FFF" },
-  help: {
-    color: BRAND.muted,
-    fontSize: 12,
-    lineHeight: 18,
-    marginTop: 10
-  },
   save: {
     minHeight: 48,
     borderRadius: 13,
@@ -239,5 +233,15 @@ const styles = StyleSheet.create({
     marginTop: 22
   },
   saveText: { color: "#FFF", fontWeight: "900" },
+  deleteClass: {
+    minHeight: 48,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: BRAND.danger,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 12
+  },
+  deleteClassText: { color: BRAND.danger, fontWeight: "900" },
   status: { color: BRAND.tealDark, textAlign: "center", marginTop: 12 }
 });

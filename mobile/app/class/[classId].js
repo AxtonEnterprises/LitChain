@@ -12,6 +12,7 @@ import {
   Image,
   Pressable,
   SafeAreaView,
+  ScrollView,
   Share,
   StyleSheet,
   Text,
@@ -414,6 +415,11 @@ export default function ClassHome() {
     <SafeAreaView
       style={styles.safe}
     >
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
       <View style={styles.header}>
         <Pressable
           onPress={() => router.back()}
@@ -946,6 +952,7 @@ export default function ClassHome() {
         </Text>
       </Pressable>
 
+      </ScrollView>
       <BottomNav active="groups" />
     </SafeAreaView>
   );
@@ -1074,8 +1081,16 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     fontSize: 12
   },
-  viewport: {
+  scroll: {
     flex: 1
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 18
+  },
+  viewport: {
+    flexGrow: 0,
+    minHeight: 430
   },
   emptyWrap: {
     flex: 1,
