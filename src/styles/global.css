@@ -9770,3 +9770,72 @@ body.reader-mode .random-reads-app {
     padding-bottom: calc(1.2rem + env(safe-area-inset-bottom));
   }
 }
+/* ==================================================
+   RC1B — PWA / WEB VIEWPORT STABILIZATION
+   ================================================== */
+
+/*
+ * Normal Lit Chain pages need explicit clearance above the fixed
+ * bottom navigation, including mobile safe-area space.
+ */
+.lit-chain-app {
+  min-height: 100dvh;
+  min-height: 100svh;
+  padding-bottom:
+    calc(
+      86px +
+      max(
+        env(safe-area-inset-bottom),
+        0px
+      )
+    );
+}
+
+.lit-chain-app > .page-wrap,
+.lit-chain-app .page-wrap {
+  scroll-margin-top:
+    calc(
+      76px +
+      max(
+        env(safe-area-inset-top),
+        0px
+      )
+    );
+}
+
+@media (max-width: 760px) {
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+
+  body:not(.reader-mode) {
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior-y: auto;
+  }
+
+  .lit-chain-app {
+    position: relative;
+    width: 100%;
+    overflow-x: hidden;
+  }
+
+  .lit-bottom-nav {
+    padding-bottom:
+      max(
+        env(safe-area-inset-bottom),
+        0.4rem
+      ) !important;
+  }
+}
+
+/*
+ * The immersive Reader owns its entire viewport and must not inherit
+ * normal app-shell bottom clearance.
+ */
+body.reader-mode .lit-chain-app {
+  min-height: 100dvh;
+  padding-bottom: 0 !important;
+}
