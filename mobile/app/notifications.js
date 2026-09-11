@@ -21,6 +21,7 @@ import {
 import AppHeader from "../components/AppHeader";
 import BottomNav from "../components/BottomNav";
 import { BRAND } from "../../shared/brand";
+import useRefreshOnAppActive from "../hooks/useRefreshOnAppActive";
 
 import {
   getNativeNotifications,
@@ -101,6 +102,8 @@ export default function NotificationsScreen() {
       void load();
     }, [load])
   );
+
+  useRefreshOnAppActive(load);
 
   async function openItem(item) {
     try {
