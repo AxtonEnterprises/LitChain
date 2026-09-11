@@ -1,6 +1,5 @@
 import {
   useCallback,
-  useEffect,
   useState
 } from "react";
 
@@ -14,7 +13,10 @@ import {
   View
 } from "react-native";
 
-import { router } from "expo-router";
+import {
+  router,
+  useFocusEffect
+} from "expo-router";
 
 import AppHeader from "../components/AppHeader";
 import BottomNav from "../components/BottomNav";
@@ -44,8 +46,10 @@ function notificationTitle(item) {
     case "chain_reply":
       return `${actor} replied to your Chain entry.`;
     case "assignment":
-      return `New assignment in ${item.groupName || "your class"}.`;
+    case "class_assignment":
+      return `Class activity in ${item.groupName || "your class"}.`;
     case "grade":
+    case "class_grade":
       return `A grade was updated in ${item.groupName || "your class"}.`;
     default:
       return "You have a new Lit Chain notification.";
@@ -62,8 +66,10 @@ function glyph(type) {
     case "chain_reply":
       return "↩";
     case "assignment":
+    case "class_assignment":
       return "▤";
     case "grade":
+    case "class_grade":
       return "A";
     default:
       return "◇";
@@ -73,38 +79,75 @@ function glyph(type) {
 export default function NotificationsScreen() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState("");
 
   const load = useCallback(async () => {
     try {
+      setStatus("");
       setItems(await getNativeNotifications());
+    } catch (error) {
+      setStatus(
+        error?.message ||
+        "Could not load notifications."
+      );
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useFocusEffect(
+    useCallback(() => {
+      setLoading(true);
+      void load();
+    }, [load])
+  );
 
   async function openItem(item) {
-    if (!item.read) {
-      await markNativeNotificationRead(item.id);
+    try {
+      if (!item.read) {
+        await markNativeNotificationRead(item.id);
 
-      setItems((current) =>
-        current.map((candidate) =>
-          candidate.id === item.id
-            ? { ...candidate, read: true }
-            : candidate
-        )
-      );
+        setItems((current) =>
+          current.map((candidate) =>
+            candidate.id === item.id
+              ? { ...candidate, read: true }
+              : candidate
+          )
+        );
+      }
+    } catch {
+      // Navigation is still useful even if the read receipt fails.
     }
 
-    if (item.groupId) {
+    const groupId = item.groupId
+      ? String(item.groupId)
+      : "";
+
+    if (
+      groupId &&
+      ["class_assignment", "class_grade", "assignment", "grade"].includes(
+        item.type
+      )
+    ) {
+      router.push({
+        pathname: "/class/[classId]",
+        params: { classId: groupId }
+      });
+      return;
+    }
+
+    if (groupId) {
       router.push({
         pathname: "/group/[groupId]",
-        params: {
-          groupId: String(item.groupId)
-        }
+        params: { groupId }
+      });
+      return;
+    }
+
+    if (item.chainId) {
+      router.push({
+        pathname: "/chain/[chainId]",
+        params: { chainId: String(item.chainId) }
       });
       return;
     }
@@ -113,14 +156,21 @@ export default function NotificationsScreen() {
   }
 
   async function markAll() {
-    await markAllNativeNotificationsRead();
+    try {
+      await markAllNativeNotificationsRead();
 
-    setItems((current) =>
-      current.map((item) => ({
-        ...item,
-        read: true
-      }))
-    );
+      setItems((current) =>
+        current.map((item) => ({
+          ...item,
+          read: true
+        }))
+      );
+    } catch (error) {
+      setStatus(
+        error?.message ||
+        "Could not mark notifications read."
+      );
+    }
   }
 
   return (
@@ -135,10 +185,17 @@ export default function NotificationsScreen() {
           <Text style={styles.back}>‹ Back</Text>
         </Pressable>
 
-        <Pressable onPress={markAll}>
+        <Pressable
+          disabled={!items.some((item) => !item.read)}
+          onPress={markAll}
+        >
           <Text style={styles.markAll}>Mark all read</Text>
         </Pressable>
       </View>
+
+      {!!status && (
+        <Text style={styles.status}>{status}</Text>
+      )}
 
       {loading ? (
         <View style={styles.center}>
@@ -148,6 +205,8 @@ export default function NotificationsScreen() {
         <FlatList
           data={items}
           keyExtractor={(item) => item.id}
+          refreshing={loading}
+          onRefresh={load}
           contentContainerStyle={styles.list}
           ListEmptyComponent={
             <View style={styles.center}>
@@ -223,8 +282,15 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     fontSize: 12
   },
+  status: {
+    color: BRAND.tealDark,
+    backgroundColor: "#FFF8DF",
+    padding: 10,
+    textAlign: "center"
+  },
   list: {
     padding: 14,
+    paddingBottom: 100,
     flexGrow: 1
   },
   center: {
