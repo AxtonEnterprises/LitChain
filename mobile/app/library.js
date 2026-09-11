@@ -1402,7 +1402,7 @@ const styles = StyleSheet.create({
     color: BRAND.muted,
     textAlign: "center",
     marginTop: 12
-  }
+  },
   accountActions: {
     flexDirection: "row",
     gap: 8,
