@@ -1,12 +1,15 @@
 import {
   collection,
+  collectionGroup,
   deleteDoc,
   doc,
   getDoc,
   getDocs,
+  query,
   serverTimestamp,
   setDoc,
   updateDoc,
+  where,
   writeBatch
 } from "firebase/firestore";
 
@@ -129,11 +132,6 @@ export async function getNativeDiscoverableGroups() {
     })
   );
 
-  /*
-   * Classes are intentionally allowed here.
-   * A discoverable/public class configured for open or request
-   * enrollment should be joinable exactly like the PWA rules allow.
-   */
   return rows.filter((group) => {
     if (activeMembership(group.membership)) return false;
 
@@ -159,11 +157,6 @@ export async function joinNativeGroup(group) {
   }
 
   if (group.joinPolicy === "request_to_join") {
-    /*
-     * Firestore requires request-to-join groups/classes to be
-     * discoverable or public. Surface a useful client error rather
-     * than an opaque permissions failure for an invalid combination.
-     */
     const isDiscoverable =
       group.discoverable === true ||
       group.visibility === "discoverable" ||
@@ -279,6 +272,124 @@ export async function getNativeGroupMembers(groupId) {
       })
     )
   );
+}
+
+export async function getNativeIncomingGroupInvites() {
+  const user = requireUser();
+
+  const snapshot = await getDocs(
+    query(
+      collectionGroup(db, "invites"),
+      where("userId", "==", user.uid)
+    )
+  );
+
+  const pending = snapshot.docs
+    .map((item) => ({
+      id: item.id,
+      ...item.data()
+    }))
+    .filter((item) => item.status === "pending");
+
+  const hydrated = await Promise.all(
+    pending.map(async (invite) => {
+      const groupId = String(invite.groupId || "");
+
+      if (!groupId) return null;
+
+      try {
+        const groupSnapshot = await getDoc(
+          doc(db, "groups", groupId)
+        );
+
+        if (!groupSnapshot.exists()) {
+          return null;
+        }
+
+        const group = {
+          id: groupSnapshot.id,
+          ...groupSnapshot.data()
+        };
+
+        return {
+          ...invite,
+          group,
+          isClass: group.type === "class"
+        };
+      } catch {
+        return null;
+      }
+    })
+  );
+
+  return hydrated.filter(Boolean);
+}
+
+export async function respondNativeGroupInvite(
+  groupId,
+  accept
+) {
+  const user = requireUser();
+  const cleanGroupId = String(groupId || "");
+
+  if (!cleanGroupId) {
+    throw new Error("Missing group or class ID.");
+  }
+
+  const inviteRef = doc(
+    db,
+    "groups",
+    cleanGroupId,
+    "invites",
+    user.uid
+  );
+
+  const inviteSnapshot =
+    await getDoc(inviteRef);
+
+  if (
+    !inviteSnapshot.exists() ||
+    inviteSnapshot.data()?.status !== "pending"
+  ) {
+    throw new Error(
+      "This invitation is no longer available."
+    );
+  }
+
+  const now = new Date().toISOString();
+  const batch = writeBatch(db);
+
+  batch.update(inviteRef, {
+    status: accept ? "accepted" : "declined",
+    updatedAtISO: now,
+    updatedAt: serverTimestamp()
+  });
+
+  if (accept) {
+    batch.set(
+      doc(
+        db,
+        "groups",
+        cleanGroupId,
+        "members",
+        user.uid
+      ),
+      {
+        userId: user.uid,
+        groupId: cleanGroupId,
+        role: "member",
+        status: "active",
+        joinedAtISO: now,
+        joinedAt: serverTimestamp()
+      }
+    );
+  }
+
+  await batch.commit();
+
+  return {
+    status: accept ? "accepted" : "declined"
+  };
 }
 
 export async function getNativeGroupJoinRequests(groupId) {

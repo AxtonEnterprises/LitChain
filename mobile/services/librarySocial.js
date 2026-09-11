@@ -2,11 +2,15 @@ import {
   collection,
   deleteDoc,
   doc,
+  endAt,
   getDoc,
   getDocs,
+  limit,
+  orderBy,
   query,
   serverTimestamp,
   setDoc,
+  startAt,
   updateDoc,
   where
 } from "firebase/firestore";
@@ -29,6 +33,13 @@ function pairId(a, b) {
     .join("__");
 }
 
+function normalizeUsername(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/^@+/, "");
+}
+
 async function getPublicProfile(userId) {
   if (!userId) return null;
 
@@ -44,6 +55,7 @@ async function getPublicProfile(userId) {
     if (snapshot.exists()) {
       return {
         id: snapshot.id,
+        userId: snapshot.id,
         ...snapshot.data()
       };
     }
@@ -57,6 +69,7 @@ async function getPublicProfile(userId) {
     if (snapshot.exists()) {
       return {
         id: snapshot.id,
+        userId: snapshot.id,
         ...snapshot.data()
       };
     }
@@ -152,38 +165,101 @@ export async function getNativeFriendBundle() {
   };
 }
 
+/*
+ * Prefix/partial username search.
+ *
+ * We search publicProfiles rather than usernames because the current
+ * Firestore rules intentionally deny LIST on /usernames while public
+ * profiles are readable. Usernames are normalized lowercase in the app.
+ */
+export async function searchNativeReadersByUsername(
+  username,
+  maxResults = 12
+) {
+  requireUser();
+
+  const clean = normalizeUsername(username);
+
+  if (!clean) return [];
+
+  const snapshot = await getDocs(
+    query(
+      collection(db, "publicProfiles"),
+      orderBy("username"),
+      startAt(clean),
+      endAt(`${clean}\uf8ff`),
+      limit(
+        Math.max(
+          1,
+          Math.min(
+            Number(maxResults) || 12,
+            25
+          )
+        )
+      )
+    )
+  );
+
+  return snapshot.docs
+    .map((item) => ({
+      id: item.id,
+      userId: item.id,
+      ...item.data()
+    }))
+    .filter((item) =>
+      String(item.username || "")
+        .toLowerCase()
+        .startsWith(clean)
+    );
+}
+
 export async function findNativeReaderByUsername(
   username
 ) {
-  const clean = String(username || "")
-    .trim()
-    .toLowerCase()
-    .replace(/^@/, "");
-
+  const clean = normalizeUsername(username);
   if (!clean) return null;
 
-  const reservation = await getDoc(
-    doc(db, "usernames", clean)
+  /*
+   * Preserve exact lookup behavior as a fast path.
+   */
+  try {
+    const reservation = await getDoc(
+      doc(db, "usernames", clean)
+    );
+
+    if (reservation.exists()) {
+      const userId =
+        reservation.data()?.userId;
+
+      if (userId) {
+        const profile =
+          await getPublicProfile(userId);
+
+        return {
+          id: userId,
+          userId,
+          username: clean,
+          ...(profile || {})
+        };
+      }
+    }
+  } catch {}
+
+  const matches =
+    await searchNativeReadersByUsername(
+      clean,
+      10
+    );
+
+  return (
+    matches.find(
+      (item) =>
+        String(item.username || "")
+          .toLowerCase() === clean
+    ) ||
+    matches[0] ||
+    null
   );
-
-  if (!reservation.exists()) {
-    return null;
-  }
-
-  const userId =
-    reservation.data()?.userId;
-
-  if (!userId) return null;
-
-  const profile =
-    await getPublicProfile(userId);
-
-  return {
-    id: userId,
-    userId,
-    username: clean,
-    ...(profile || {})
-  };
 }
 
 export async function sendNativeFriendRequest(
