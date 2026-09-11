@@ -5,9 +5,6 @@ import { registerSW } from "virtual:pwa-register";
 
 import App from "./App.jsx";
 import "./styles/global.css";
-import "./styles/rc1-stabilization.css";
-
-
 window.addEventListener(
   "vite:preloadError",
   (event) => {
