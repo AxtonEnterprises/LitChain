@@ -13,7 +13,7 @@ import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import BottomNav from "../../components/BottomNav";
 import { BRAND } from "../../../shared/brand";
 import {
-  findNativeReaderByUsername
+  searchNativeReadersByUsername
 } from "../../services/librarySocial";
 import {
   canManageClass,
@@ -37,7 +37,7 @@ export default function ClassStudents() {
   const [busyId, setBusyId] = useState("");
   const [status, setStatus] = useState("");
   const [studentQuery, setStudentQuery] = useState("");
-  const [studentResult, setStudentResult] = useState(null);
+  const [studentResults, setStudentResults] = useState([]);
   const [studentSearching, setStudentSearching] = useState(false);
 
   async function load() {
@@ -110,61 +110,73 @@ export default function ClassStudents() {
   }
 
   async function searchStudent() {
+    const term = studentQuery.trim();
+
+    if (term.length < 2) {
+      setStatus("Enter at least 2 characters.");
+      setStudentResults([]);
+      return;
+    }
+
     try {
       setStudentSearching(true);
       setStatus("");
-      setStudentResult(null);
 
-      const result =
-        await findNativeReaderByUsername(
-          studentQuery
+      const results =
+        await searchNativeReadersByUsername(
+          term,
+          12
         );
 
-      if (!result) {
-        setStatus(
-          "No reader found with that username."
-        );
-        return;
-      }
+      const memberIds = new Set(
+        members.map((member) =>
+          String(member.userId || member.id)
+        )
+      );
 
-      const isMember = members.some(
-        (member) =>
-          String(
-            member.userId || member.id
-          ) ===
-          String(
-            result.userId || result.id
+      const filtered = results.filter(
+        (reader) =>
+          !memberIds.has(
+            String(reader.userId || reader.id)
           )
       );
 
-      if (isMember) {
-        setStatus(
-          `${memberName(result)} is already in this class.`
-        );
-        return;
-      }
+      setStudentResults(filtered);
 
-      setStudentResult(result);
+      if (!filtered.length) {
+        setStatus(
+          "No matching readers found outside this class."
+        );
+      }
     } catch (error) {
       setStatus(
         error?.message ||
-          "Could not search for that reader."
+          "Could not search for readers."
       );
     } finally {
       setStudentSearching(false);
     }
   }
 
-  async function invite(friend) {
-    const userId = String(friend.otherUserId || friend.id || "");
+  async function invite(reader) {
+    const userId = String(
+      reader.userId ||
+      reader.otherUserId ||
+      reader.id ||
+      ""
+    );
 
     try {
       setBusyId(userId);
       setStatus("");
       await inviteNativeClassFriend(classId, userId);
-      setStatus(`Invitation sent to ${memberName(friend)}.`);
-      setStudentResult(null);
-      setStudentQuery("");
+      setStatus(`Invitation sent to ${memberName(reader)}.`);
+      setStudentResults((current) =>
+        current.filter(
+          (item) =>
+            String(item.userId || item.id) !== userId
+        )
+      );
     } catch (error) {
       setStatus(error?.message || "Could not send the invitation.");
     } finally {
@@ -175,14 +187,19 @@ export default function ClassStudents() {
   if (loading) {
     return (
       <SafeAreaView style={styles.safe}>
-        <View style={styles.center}><ActivityIndicator size="large" /></View>
+        <View style={styles.center}>
+          <ActivityIndicator size="large" />
+        </View>
       </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={styles.safe}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={styles.content}
+      >
         <Pressable onPress={() => router.back()}>
           <Text style={styles.back}>‹ Class</Text>
         </Pressable>
@@ -204,12 +221,18 @@ export default function ClassStudents() {
             <View key={userId} style={styles.memberCard}>
               <View style={styles.memberTop}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.memberName}>{memberName(member)}</Text>
+                  <Text style={styles.memberName}>
+                    {memberName(member)}
+                  </Text>
                   {!!member.username && (
-                    <Text style={styles.username}>@{member.username}</Text>
+                    <Text style={styles.username}>
+                      @{member.username}
+                    </Text>
                   )}
                 </View>
-                <Text style={styles.role}>{classRoleLabel(member.role)}</Text>
+                <Text style={styles.role}>
+                  {classRoleLabel(member.role)}
+                </Text>
               </View>
 
               {canEditRole && (
@@ -225,13 +248,15 @@ export default function ClassStudents() {
                       onPress={() => changeRole(member, value)}
                       style={[
                         styles.roleButton,
-                        member.role === value && styles.roleButtonActive
+                        member.role === value &&
+                          styles.roleButtonActive
                       ]}
                     >
                       <Text
                         style={[
                           styles.roleButtonText,
-                          member.role === value && styles.roleButtonTextActive
+                          member.role === value &&
+                            styles.roleButtonTextActive
                         ]}
                       >
                         {label}
@@ -247,7 +272,9 @@ export default function ClassStudents() {
                   onPress={() => remove(member)}
                   style={styles.removeButton}
                 >
-                  <Text style={styles.removeText}>Remove from class</Text>
+                  <Text style={styles.removeText}>
+                    Remove from class
+                  </Text>
                 </Pressable>
               )}
             </View>
@@ -260,8 +287,8 @@ export default function ClassStudents() {
               Find Student
             </Text>
             <Text style={styles.sectionHelp}>
-              Search any Lit Chain reader by username.
-              They do not need to already be your friend.
+              Search by partial or full Lit Chain username.
+              Students do not need to already be friends.
             </Text>
 
             <View style={styles.searchRow}>
@@ -269,7 +296,7 @@ export default function ClassStudents() {
                 value={studentQuery}
                 onChangeText={setStudentQuery}
                 onSubmitEditing={searchStudent}
-                placeholder="@username"
+                placeholder="Username"
                 autoCapitalize="none"
                 autoCorrect={false}
                 style={styles.searchInput}
@@ -278,62 +305,64 @@ export default function ClassStudents() {
               <Pressable
                 disabled={
                   studentSearching ||
-                  !studentQuery.trim()
+                  studentQuery.trim().length < 2
                 }
                 onPress={searchStudent}
                 style={[
                   styles.searchButton,
                   (
                     studentSearching ||
-                    !studentQuery.trim()
+                    studentQuery.trim().length < 2
                   ) &&
                     styles.disabledButton
                 ]}
               >
                 <Text style={styles.searchButtonText}>
                   {studentSearching
-                    ? "Searching…"
-                    : "Find"}
+                    ? "…"
+                    : "Search"}
                 </Text>
               </Pressable>
             </View>
 
-            {!!studentResult && (
-              <View style={styles.searchResult}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.memberName}>
-                    {memberName(studentResult)}
-                  </Text>
-                  {!!studentResult.username && (
-                    <Text style={styles.username}>
-                      @{studentResult.username}
-                    </Text>
-                  )}
-                </View>
+            {studentResults.map((reader) => {
+              const userId = String(
+                reader.userId || reader.id
+              );
 
-                <Pressable
-                  disabled={
-                    busyId ===
-                    String(
-                      studentResult.userId ||
-                      studentResult.id
-                    )
-                  }
-                  onPress={() =>
-                    invite(studentResult)
-                  }
-                  style={styles.inviteButton}
+              return (
+                <View
+                  key={userId}
+                  style={styles.searchResult}
                 >
-                  <Text style={styles.inviteText}>
-                    Invite Student
-                  </Text>
-                </Pressable>
-              </View>
-            )}
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.memberName}>
+                      {memberName(reader)}
+                    </Text>
+                    {!!reader.username && (
+                      <Text style={styles.username}>
+                        @{reader.username}
+                      </Text>
+                    )}
+                  </View>
+
+                  <Pressable
+                    disabled={busyId === userId}
+                    onPress={() => invite(reader)}
+                    style={styles.inviteButton}
+                  >
+                    <Text style={styles.inviteText}>
+                      Invite
+                    </Text>
+                  </Pressable>
+                </View>
+              );
+            })}
 
             <Text style={styles.sectionTitle}>
               Invite Friends
             </Text>
+
             {!friends.length ? (
               <Text style={styles.empty}>
                 No uninvited friends available.
@@ -356,12 +385,8 @@ export default function ClassStudents() {
                     </Text>
 
                     <Pressable
-                      disabled={
-                        busyId === userId
-                      }
-                      onPress={() =>
-                        invite(friend)
-                      }
+                      disabled={busyId === userId}
+                      onPress={() => invite(friend)}
                       style={styles.inviteButton}
                     >
                       <Text style={styles.inviteText}>
@@ -419,7 +444,12 @@ const styles = StyleSheet.create({
   memberName: { color: BRAND.ink, fontWeight: "900", fontSize: 16 },
   username: { color: BRAND.muted, marginTop: 2 },
   role: { color: BRAND.tealDark, fontWeight: "900", fontSize: 12 },
-  roleButtons: { flexDirection: "row", flexWrap: "wrap", gap: 7, marginTop: 12 },
+  roleButtons: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 7,
+    marginTop: 12
+  },
   roleButton: {
     borderWidth: 1,
     borderColor: BRAND.line,
@@ -427,8 +457,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 7
   },
-  roleButtonActive: { backgroundColor: BRAND.teal, borderColor: BRAND.teal },
-  roleButtonText: { color: BRAND.ink, fontWeight: "800", fontSize: 12 },
+  roleButtonActive: {
+    backgroundColor: BRAND.teal,
+    borderColor: BRAND.teal
+  },
+  roleButtonText: {
+    color: BRAND.ink,
+    fontWeight: "800",
+    fontSize: 12
+  },
   roleButtonTextActive: { color: "#FFF" },
   removeButton: { marginTop: 12 },
   removeText: { color: BRAND.danger, fontWeight: "800" },
@@ -439,7 +476,6 @@ const styles = StyleSheet.create({
     marginTop: 22,
     marginBottom: 10
   },
-  empty: { color: BRAND.muted },
   sectionHelp: {
     color: BRAND.muted,
     fontSize: 12,
@@ -447,6 +483,7 @@ const styles = StyleSheet.create({
     marginTop: -4,
     marginBottom: 10
   },
+  empty: { color: BRAND.muted },
   searchRow: {
     flexDirection: "row",
     gap: 8,
@@ -463,7 +500,7 @@ const styles = StyleSheet.create({
     color: BRAND.ink
   },
   searchButton: {
-    minWidth: 86,
+    minWidth: 92,
     minHeight: 46,
     borderRadius: 12,
     backgroundColor: BRAND.teal,
@@ -471,13 +508,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 12
   },
-  searchButtonText: {
-    color: "#FFF",
-    fontWeight: "900"
-  },
-  disabledButton: {
-    opacity: 0.45
-  },
+  searchButtonText: { color: "#FFF", fontWeight: "900" },
+  disabledButton: { opacity: 0.45 },
   searchResult: {
     flexDirection: "row",
     alignItems: "center",
@@ -487,7 +519,7 @@ const styles = StyleSheet.create({
     borderColor: BRAND.teal,
     borderRadius: 14,
     padding: 12,
-    marginBottom: 10
+    marginBottom: 8
   },
   inviteRow: {
     flexDirection: "row",
