@@ -10,6 +10,7 @@ import { onAuthStateChanged } from "firebase/auth";
 
 import { auth } from "./firebase";
 import Header from "./components/Header";
+import ClassProgressSync from "./components/ClassProgressSync.jsx";
 import Home from "./pages/Home";
 import Search from "./pages/Search";
 import Reader from "./pages/Reader";
@@ -36,6 +37,9 @@ export default function App() {
     location.pathname === "/read" ||
     location.pathname.startsWith("/read/");
 
+  const isReaderRoute =
+    location.pathname.startsWith("/read/reader/");
+
   useEffect(() => {
     return onAuthStateChanged(auth, (user) => {
       if (!user) return;
@@ -56,8 +60,41 @@ export default function App() {
     });
   }, [location.pathname, navigate]);
 
+  /*
+   * Browser/PWA viewport state can occasionally survive a route transition,
+   * especially after leaving the immersive reader. Make every non-reader
+   * route authoritative about normal scrolling and viewport position.
+   */
+  useEffect(() => {
+    if (isReaderRoute) return;
+
+    document.body.classList.remove(
+      "reader-mode",
+      "reader-dark-mode"
+    );
+    document.documentElement.classList.remove(
+      "reader-mode",
+      "reader-dark-mode"
+    );
+
+    document.body.style.removeProperty("overflow");
+    document.documentElement.style.removeProperty("overflow");
+
+    const frame = window.requestAnimationFrame(() => {
+      window.scrollTo({
+        top: 0,
+        left: 0,
+        behavior: "auto"
+      });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [location.pathname, isReaderRoute]);
+
   return (
     <>
+      <ClassProgressSync />
+
       {isAppRoute && <Header />}
 
       <main className={isAppRoute ? "app-main lit-chain-app" : "auth-app"}>
