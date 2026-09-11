@@ -1108,11 +1108,10 @@ const styles = StyleSheet.create({
   },
   assignmentPage: {
     paddingHorizontal: 16,
-    paddingBottom: 12
+    paddingBottom: 12,
+    justifyContent: "flex-start"
   },
   assignmentCard: {
-    flex: 1,
-    minHeight: 340,
     backgroundColor: BRAND.surface,
     borderWidth: 1,
     borderColor: BRAND.line,
@@ -1173,8 +1172,7 @@ const styles = StyleSheet.create({
     marginTop: 3
   },
   cardFooter: {
-    marginTop: "auto",
-    paddingTop: 18
+    paddingTop: 16
   },
   readButton: {
     minHeight: 48,

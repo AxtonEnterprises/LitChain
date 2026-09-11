@@ -20,6 +20,7 @@ import {
 
 import BottomNav from "../../components/BottomNav";
 import { BRAND } from "../../../shared/brand";
+import useRefreshOnAppActive from "../../hooks/useRefreshOnAppActive";
 
 import {
   createNativeAssignmentDiscussion,
@@ -73,6 +74,8 @@ export default function AssignmentDiscussions() {
       void load();
     }, [load])
   );
+
+  useRefreshOnAppActive(load);
 
   async function create() {
     try {
@@ -214,7 +217,8 @@ export default function AssignmentDiscussions() {
               </Pressable>
             </View>
           </View>
-        </View>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <BottomNav active="groups" />
