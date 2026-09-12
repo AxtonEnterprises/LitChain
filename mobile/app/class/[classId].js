@@ -15,6 +15,7 @@ import {
   Share,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View
 } from "react-native";
 
@@ -23,6 +24,11 @@ import {
   useFocusEffect,
   useLocalSearchParams
 } from "expo-router";
+
+import {
+  deleteDoc,
+  doc
+} from "firebase/firestore";
 
 import BottomNav from "../../components/BottomNav";
 import { BRAND } from "../../../shared/brand";
@@ -50,7 +56,7 @@ import {
   syncNativeClassReadingProgress
 } from "../../services/classProgress";
 
-import { auth } from "../../lib/firebase";
+import { auth, db } from "../../lib/firebase";
 
 function formatDue(value) {
   if (!value) return "No due date";
@@ -83,6 +89,15 @@ export default function ClassHome() {
     params.classId || ""
   );
 
+  const { height: windowHeight } =
+    useWindowDimensions();
+
+  const assignmentPageHeight =
+    Math.max(
+      560,
+      Math.floor(windowHeight - 92)
+    );
+
   const [classData, setClassData] =
     useState(null);
   const [members, setMembers] =
@@ -103,6 +118,10 @@ export default function ClassHome() {
     useState(0);
   const [showCreateMenu, setShowCreateMenu] =
     useState(false);
+  const [
+    assignmentSectionY,
+    setAssignmentSectionY
+  ] = useState(0);
 
   async function load() {
     try {
@@ -395,6 +414,52 @@ export default function ClassHome() {
     );
   }
 
+  function leaveClass() {
+    Alert.alert(
+      "Leave Class",
+      "Leave this class? You will lose access to its assignments, discussions, grades, and class progress until you join again.",
+      [
+        {
+          text: "Cancel",
+          style: "cancel"
+        },
+        {
+          text: "Leave Class",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const userId =
+                auth.currentUser?.uid || "";
+
+              if (!userId) {
+                throw new Error(
+                  "You must be logged in."
+                );
+              }
+
+              await deleteDoc(
+                doc(
+                  db,
+                  "groups",
+                  classId,
+                  "members",
+                  userId
+                )
+              );
+
+              router.replace("/groups");
+            } catch (error) {
+              setStatus(
+                error?.message ||
+                  "Could not leave this class."
+              );
+            }
+          }
+        }
+      ]
+    );
+  }
+
   function openDiscussion() {
     if (!generalDiscussion) return;
 
@@ -456,6 +521,22 @@ export default function ClassHome() {
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        decelerationRate="fast"
+        snapToAlignment="start"
+        snapToOffsets={
+          assignmentSectionY > 0 &&
+          assignments.length
+            ? [
+                0,
+                ...assignments.map(
+                  (_, index) =>
+                    assignmentSectionY +
+                    index *
+                      assignmentPageHeight
+                )
+              ]
+            : undefined
+        }
       >
       <View style={styles.header}>
         <Pressable
@@ -581,6 +662,22 @@ export default function ClassHome() {
             </Text>
           </Pressable>
 
+          {role === "member" && (
+            <Pressable
+              onPress={leaveClass}
+              style={[
+                styles.smallButton,
+                styles.leaveClassButton
+              ]}
+            >
+              <Text
+                style={styles.leaveClassText}
+              >
+                Leave Class
+              </Text>
+            </Pressable>
+          )}
+
           {canManageClass(role) && (
             <Pressable
               onPress={() =>
@@ -681,7 +778,21 @@ export default function ClassHome() {
         )}
       </View>
 
-      <View style={styles.assignmentList}>
+      <View
+        style={styles.assignmentList}
+        onLayout={(event) => {
+          const y = Math.floor(
+            event.nativeEvent.layout.y
+          );
+
+          if (
+            y > 0 &&
+            y !== assignmentSectionY
+          ) {
+            setAssignmentSectionY(y);
+          }
+        }}
+      >
         {!assignments.length ? (
           <View style={styles.emptyWrap}>
             <Text style={styles.emptyTitle}>
@@ -713,7 +824,13 @@ export default function ClassHome() {
               onTouchStart={() =>
                 setAssignmentIndex(index)
               }
-              style={styles.assignmentPage}
+              style={[
+                styles.assignmentPage,
+                {
+                  minHeight:
+                    assignmentPageHeight
+                }
+              ]}
             >
               <View style={styles.assignmentCard}>
                 <View style={styles.bookRow}>
@@ -838,7 +955,7 @@ export default function ClassHome() {
 
               {index < assignments.length - 1 && (
                 <Text style={styles.verticalSwipeHint}>
-                  Swipe up for next assignment
+                  Swipe up for next class item
                 </Text>
               )}
             </View>
@@ -973,6 +1090,14 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     fontSize: 12
   },
+  leaveClassButton: {
+    borderColor: "#E4CACA"
+  },
+  leaveClassText: {
+    color: BRAND.danger,
+    fontWeight: "900",
+    fontSize: 12
+  },
   status: {
     color: BRAND.tealDark,
     backgroundColor: "#FFF8DF",
@@ -1082,8 +1207,8 @@ const styles = StyleSheet.create({
   },
   assignmentPage: {
     paddingHorizontal: 16,
-    paddingBottom: 12,
-    justifyContent: "flex-start"
+    paddingVertical: 18,
+    justifyContent: "center"
   },
   verticalSwipeHint: {
     color: BRAND.muted,
