@@ -26,8 +26,8 @@ import {
 } from "expo-router";
 
 import {
-  deleteDoc,
-  doc
+  collection,
+  getDocs
 } from "firebase/firestore";
 
 import BottomNav from "../../components/BottomNav";
@@ -122,6 +122,10 @@ export default function ClassHome() {
     assignmentSectionY,
     setAssignmentSectionY
   ] = useState(0);
+  const [
+    joinRequestCount,
+    setJoinRequestCount
+  ] = useState(0);
 
   async function load() {
     try {
@@ -172,6 +176,45 @@ export default function ClassHome() {
           );
       }
 
+      let pendingJoinRequests = 0;
+
+      if (
+        canManageClass(
+          loadedClass.membership?.role
+        )
+      ) {
+        try {
+          const requestSnapshot =
+            await getDocs(
+              collection(
+                db,
+                "groups",
+                classId,
+                "joinRequests"
+              )
+            );
+
+          pendingJoinRequests =
+            requestSnapshot.docs.filter(
+              (requestDoc) => {
+                const data =
+                  requestDoc.data();
+
+                return (
+                  !data.status ||
+                  data.status ===
+                    "pending"
+                );
+              }
+            ).length;
+        } catch {
+          pendingJoinRequests = 0;
+        }
+      }
+
+      setJoinRequestCount(
+        pendingJoinRequests
+      );
       setClassData(loadedClass);
       setMembers(loadedMembers);
       setAssignments(
@@ -414,52 +457,6 @@ export default function ClassHome() {
     );
   }
 
-  function leaveClass() {
-    Alert.alert(
-      "Leave Class",
-      "Leave this class? You will lose access to its assignments, discussions, grades, and class progress until you join again.",
-      [
-        {
-          text: "Cancel",
-          style: "cancel"
-        },
-        {
-          text: "Leave Class",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              const userId =
-                auth.currentUser?.uid || "";
-
-              if (!userId) {
-                throw new Error(
-                  "You must be logged in."
-                );
-              }
-
-              await deleteDoc(
-                doc(
-                  db,
-                  "groups",
-                  classId,
-                  "members",
-                  userId
-                )
-              );
-
-              router.replace("/groups");
-            } catch (error) {
-              setStatus(
-                error?.message ||
-                  "Could not leave this class."
-              );
-            }
-          }
-        }
-      ]
-    );
-  }
-
   function openDiscussion() {
     if (!generalDiscussion) return;
 
@@ -517,27 +514,6 @@ export default function ClassHome() {
     <SafeAreaView
       style={styles.safe}
     >
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        decelerationRate="fast"
-        snapToAlignment="start"
-        snapToOffsets={
-          assignmentSectionY > 0 &&
-          assignments.length
-            ? [
-                0,
-                ...assignments.map(
-                  (_, index) =>
-                    assignmentSectionY +
-                    index *
-                      assignmentPageHeight
-                )
-              ]
-            : undefined
-        }
-      >
       <View style={styles.header}>
         <Pressable
           onPress={() => router.back()}
@@ -590,6 +566,23 @@ export default function ClassHome() {
             >
               Students
             </Text>
+
+            {joinRequestCount > 0 && (
+              <View
+                style={
+                  styles.studentRequestBadge
+                }
+              >
+                <Text
+                  style={
+                    styles.studentRequestBadgeText
+                  }
+                >
+                  🔔
+                  {joinRequestCount}
+                </Text>
+              </View>
+            )}
           </Pressable>
 
           <Pressable
@@ -662,22 +655,6 @@ export default function ClassHome() {
             </Text>
           </Pressable>
 
-          {role === "member" && (
-            <Pressable
-              onPress={leaveClass}
-              style={[
-                styles.smallButton,
-                styles.leaveClassButton
-              ]}
-            >
-              <Text
-                style={styles.leaveClassText}
-              >
-                Leave Class
-              </Text>
-            </Pressable>
-          )}
-
           {canManageClass(role) && (
             <Pressable
               onPress={() =>
@@ -705,6 +682,28 @@ export default function ClassHome() {
         </View>
       </View>
 
+
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        decelerationRate="fast"
+        snapToAlignment="start"
+        snapToOffsets={
+          assignmentSectionY > 0 &&
+          assignments.length
+            ? [
+                0,
+                ...assignments.map(
+                  (_, index) =>
+                    assignmentSectionY +
+                    index *
+                      assignmentPageHeight
+                )
+              ]
+            : undefined
+        }
+      >
       {!!status && (
         <Text style={styles.status}>
           {status}
@@ -1079,6 +1078,7 @@ const styles = StyleSheet.create({
     marginTop: 10
   },
   smallButton: {
+    position: "relative",
     borderWidth: 1,
     borderColor: BRAND.line,
     borderRadius: 10,
@@ -1090,13 +1090,23 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     fontSize: 12
   },
-  leaveClassButton: {
-    borderColor: "#E4CACA"
+  studentRequestBadge: {
+    position: "absolute",
+    top: -9,
+    right: -8,
+    minWidth: 28,
+    height: 22,
+    paddingHorizontal: 4,
+    borderRadius: 999,
+    backgroundColor:
+      BRAND.yellow,
+    alignItems: "center",
+    justifyContent: "center"
   },
-  leaveClassText: {
-    color: BRAND.danger,
+  studentRequestBadgeText: {
+    color: BRAND.ink,
     fontWeight: "900",
-    fontSize: 12
+    fontSize: 10
   },
   status: {
     color: BRAND.tealDark,
