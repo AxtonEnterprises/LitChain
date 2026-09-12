@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import {
   ActivityIndicator,
@@ -39,6 +39,7 @@ export default function AssignmentDiscussions() {
   const classId = String(params.classId || "");
   const assignmentId = String(params.assignmentId || "");
   const assignmentTitle = String(params.assignmentTitle || "Assignment");
+  const composeOnOpen = String(params.compose || "") === "1";
 
   const [role, setRole] = useState("member");
   const [posts, setPosts] = useState([]);
@@ -51,6 +52,20 @@ export default function AssignmentDiscussions() {
 
   const canStartDiscussion =
     canTeachClass(role);
+
+  useEffect(() => {
+    if (
+      composeOnOpen &&
+      canStartDiscussion &&
+      !loading
+    ) {
+      setComposerOpen(true);
+    }
+  }, [
+    composeOnOpen,
+    canStartDiscussion,
+    loading
+  ]);
 
   const load = useCallback(async () => {
     try {
@@ -255,7 +270,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
     paddingHorizontal: 13,
     borderRadius: 11,
-    backgroundColor: BRAND.primary,
+    backgroundColor: BRAND.teal,
     alignItems: "center",
     justifyContent: "center"
   },
@@ -317,7 +332,7 @@ const styles = StyleSheet.create({
     flex: 2,
     minHeight: 48,
     borderRadius: 12,
-    backgroundColor: BRAND.primary,
+    backgroundColor: BRAND.teal,
     alignItems: "center",
     justifyContent: "center"
   },
