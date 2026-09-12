@@ -4,6 +4,8 @@ import {
   useState
 } from "react";
 
+import { createPortal } from "react-dom";
+
 import {
   getGroupJoinRequests,
   respondToGroupJoinRequest
@@ -30,12 +32,18 @@ export default function ClassJoinRequests({
 
   const [requests, setRequests] =
     useState([]);
-  const [open, setOpen] =
-    useState(false);
   const [busyId, setBusyId] =
     useState("");
   const [status, setStatus] =
     useState("");
+  const [
+    studentsButton,
+    setStudentsButton
+  ] = useState(null);
+  const [
+    studentsSheet,
+    setStudentsSheet
+  ] = useState(null);
 
   const load = useCallback(async () => {
     if (!canManage || !groupId) {
@@ -45,13 +53,16 @@ export default function ClassJoinRequests({
 
     try {
       const rows =
-        await getGroupJoinRequests(groupId);
+        await getGroupJoinRequests(
+          groupId
+        );
 
       setRequests(
         (rows || []).filter(
           (request) =>
             !request.status ||
-            request.status === "pending"
+            request.status ===
+              "pending"
         )
       );
     } catch (error) {
@@ -69,35 +80,68 @@ export default function ClassJoinRequests({
   useEffect(() => {
     void load();
 
-    function handleFocus() {
-      void load();
+    function syncTargets() {
+      const nextButton =
+        document.querySelector(
+          'button[aria-label="Students"]'
+        );
+
+      const nextSheet =
+        document.querySelector(
+          ".class-roster-sheet"
+        );
+
+      if (nextButton) {
+        nextButton.style.position =
+          "relative";
+      }
+
+      setStudentsButton(
+        nextButton || null
+      );
+      setStudentsSheet(
+        nextSheet || null
+      );
     }
+
+    syncTargets();
+
+    const observer =
+      new MutationObserver(
+        syncTargets
+      );
+
+    observer.observe(
+      document.body,
+      {
+        childList: true,
+        subtree: true
+      }
+    );
 
     window.addEventListener(
       "focus",
-      handleFocus
+      load
     );
 
     return () => {
+      observer.disconnect();
       window.removeEventListener(
         "focus",
-        handleFocus
+        load
       );
     };
   }, [load]);
-
-  useEffect(() => {
-    if (requests.length > 0) {
-      setOpen(true);
-    }
-  }, [requests.length]);
 
   async function respond(
     request,
     accept
   ) {
     const userId =
-      String(request?.userId || "");
+      String(
+        request?.userId ||
+        ""
+      );
 
     if (!userId) return;
 
@@ -111,12 +155,14 @@ export default function ClassJoinRequests({
         accept
       );
 
-      setRequests((current) =>
-        current.filter(
-          (item) =>
-            String(item.userId) !==
-            userId
-        )
+      setRequests(
+        (current) =>
+          current.filter(
+            (item) =>
+              String(
+                item.userId
+              ) !== userId
+          )
       );
 
       setStatus(
@@ -140,212 +186,206 @@ export default function ClassJoinRequests({
     return null;
   }
 
-  const styles = {
-    trigger: {
-      position: "fixed",
-      left: "18px",
-      bottom: "92px",
-      zIndex: 5000,
-      border: "1px solid #D9DDD9",
-      borderRadius: "999px",
-      background: requests.length
-        ? "#0B2D45"
-        : "#FFFDF8",
-      color: requests.length
-        ? "#FFFFFF"
-        : "#0B2D45",
-      padding: "0.65rem 0.9rem",
-      fontWeight: 800,
-      boxShadow:
-        "0 8px 24px rgba(11,45,69,0.14)"
-    },
-    panel: {
-      position: "fixed",
-      left: "18px",
-      bottom: "148px",
-      zIndex: 5001,
-      width: "min(360px, calc(100vw - 36px))",
-      maxHeight: "60vh",
-      overflowY: "auto",
-      background: "#FFFDF8",
-      border: "1px solid #D9DDD9",
-      borderRadius: "18px",
-      padding: "1rem",
-      boxShadow:
-        "0 16px 42px rgba(11,45,69,0.22)"
-    },
-    row: {
-      borderTop: "1px solid #D9DDD9",
-      paddingTop: "0.8rem",
-      marginTop: "0.8rem"
-    },
-    actions: {
-      display: "flex",
-      gap: "0.55rem",
-      marginTop: "0.65rem"
-    },
-    accept: {
-      flex: 1,
-      border: 0,
-      borderRadius: "10px",
-      background: "#0B2D45",
-      color: "#FFFFFF",
-      padding: "0.6rem 0.75rem",
-      fontWeight: 800
-    },
-    decline: {
-      flex: 1,
-      border: "1px solid #D9DDD9",
-      borderRadius: "10px",
-      background: "#FFFDF8",
-      color: "#B13B3B",
-      padding: "0.6rem 0.75rem",
-      fontWeight: 800
-    }
-  };
-
-  return (
-    <>
-      <button
-        type="button"
-        style={styles.trigger}
-        onClick={() =>
-          setOpen(
-            (current) => !current
-          )
-        }
-      >
-        Join Requests
-        {requests.length
-          ? ` (${requests.length})`
-          : ""}
-      </button>
-
-      {open && (
-        <aside style={styles.panel}>
-          <div
+  const badge =
+    studentsButton &&
+    requests.length > 0
+      ? createPortal(
+          <span
+            aria-label={`${requests.length} pending join request${
+              requests.length === 1
+                ? ""
+                : "s"
+            }`}
+            title={`${requests.length} pending join request${
+              requests.length === 1
+                ? ""
+                : "s"
+            }`}
             style={{
-              display: "flex",
+              position: "absolute",
+              top: "-9px",
+              right: "-9px",
+              minWidth: "24px",
+              height: "24px",
+              padding: "0 5px",
+              borderRadius: "999px",
+              background:
+                "#C9962A",
+              color: "#0B2D45",
+              border:
+                "2px solid #FFFDF8",
+              display:
+                "inline-flex",
+              alignItems: "center",
               justifyContent:
-                "space-between",
-              gap: "1rem",
-              alignItems: "center"
+                "center",
+              gap: "2px",
+              fontSize: "11px",
+              fontWeight: 900,
+              lineHeight: 1,
+              zIndex: 5,
+              pointerEvents: "none"
             }}
           >
-            <div>
-              <strong>
-                Class Join Requests
-              </strong>
-              <div
-                style={{
-                  color: "#61717C",
-                  fontSize: "0.85rem",
-                  marginTop: "0.2rem"
-                }}
-              >
-                Accept or decline pending
-                students.
+            🔔
+            {requests.length}
+          </span>,
+          studentsButton
+        )
+      : null;
+
+  const requestPanel =
+    studentsSheet
+      ? createPortal(
+          <section
+            className="panel"
+            style={{
+              padding: "1rem",
+              marginTop: "1rem",
+              borderColor:
+                requests.length
+                  ? "#C9962A"
+                  : undefined
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent:
+                  "space-between",
+                gap: "1rem",
+                alignItems: "center",
+                flexWrap: "wrap"
+              }}
+            >
+              <div>
+                <p
+                  className="eyebrow"
+                  style={{
+                    marginBottom:
+                      "0.2rem"
+                  }}
+                >
+                  Students
+                </p>
+                <h3
+                  style={{
+                    margin: 0
+                  }}
+                >
+                  Join Requests
+                  {requests.length
+                    ? ` (${requests.length})`
+                    : ""}
+                </h3>
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={() =>
-                setOpen(false)
-              }
-              aria-label="Close join requests"
-              style={{
-                border: 0,
-                background: "transparent",
-                fontSize: "1.3rem",
-                cursor: "pointer"
-              }}
-            >
-              ×
-            </button>
-          </div>
+            {status && (
+              <p className="status">
+                {status}
+              </p>
+            )}
 
-          {status && (
-            <p className="status">
-              {status}
-            </p>
-          )}
+            {!requests.length ? (
+              <p
+                className="muted"
+                style={{
+                  marginBottom: 0
+                }}
+              >
+                No pending requests.
+              </p>
+            ) : (
+              <div
+                className="public-profile-entry-list"
+                style={{
+                  marginTop: "0.75rem"
+                }}
+              >
+                {requests.map(
+                  (request) => {
+                    const userId =
+                      String(
+                        request.userId ||
+                        ""
+                      );
 
-          {!requests.length ? (
-            <p
-              style={{
-                color: "#61717C",
-                marginBottom: 0
-              }}
-            >
-              No pending requests.
-            </p>
-          ) : (
-            requests.map((request) => {
-              const userId =
-                String(
-                  request.userId || ""
-                );
+                    return (
+                      <article
+                        key={userId}
+                        className="public-profile-entry"
+                      >
+                        <strong
+                          className="public-entry-book-title"
+                        >
+                          {requestName(
+                            request
+                          )}
+                        </strong>
 
-              return (
-                <div
-                  key={userId}
-                  style={styles.row}
-                >
-                  <strong>
-                    {requestName(request)}
-                  </strong>
+                        {!!request.profile
+                          ?.username && (
+                          <p className="muted">
+                            @
+                            {
+                              request
+                                .profile
+                                .username
+                            }
+                          </p>
+                        )}
 
-                  {!!request.profile?.username && (
-                    <div
-                      style={{
-                        color: "#61717C",
-                        fontSize: "0.85rem"
-                      }}
-                    >
-                      @{request.profile.username}
-                    </div>
-                  )}
+                        <div className="button-row">
+                          <button
+                            type="button"
+                            className="button primary"
+                            disabled={
+                              busyId ===
+                              userId
+                            }
+                            onClick={() =>
+                              respond(
+                                request,
+                                true
+                              )
+                            }
+                          >
+                            Accept
+                          </button>
 
-                  <div style={styles.actions}>
-                    <button
-                      type="button"
-                      disabled={
-                        busyId === userId
-                      }
-                      onClick={() =>
-                        respond(
-                          request,
-                          true
-                        )
-                      }
-                      style={styles.accept}
-                    >
-                      Accept
-                    </button>
+                          <button
+                            type="button"
+                            className="button secondary"
+                            disabled={
+                              busyId ===
+                              userId
+                            }
+                            onClick={() =>
+                              respond(
+                                request,
+                                false
+                              )
+                            }
+                          >
+                            Decline
+                          </button>
+                        </div>
+                      </article>
+                    );
+                  }
+                )}
+              </div>
+            )}
+          </section>,
+          studentsSheet
+        )
+      : null;
 
-                    <button
-                      type="button"
-                      disabled={
-                        busyId === userId
-                      }
-                      onClick={() =>
-                        respond(
-                          request,
-                          false
-                        )
-                      }
-                      style={styles.decline}
-                    >
-                      Decline
-                    </button>
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </aside>
-      )}
+  return (
+    <>
+      {badge}
+      {requestPanel}
     </>
   );
 }
