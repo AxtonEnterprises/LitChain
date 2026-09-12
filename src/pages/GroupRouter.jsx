@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 
 import Group from "./Group.jsx";
 import Classroom from "./Classroom.jsx";
+import ClassJoinRequests from "../components/ClassJoinRequests.jsx";
 import {
   ensureGeneralClassDiscussion,
   getGroup
@@ -13,6 +14,8 @@ export default function GroupRouter() {
   const [group, setGroup] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [classRefreshKey, setClassRefreshKey] =
+    useState(0);
 
   useEffect(() => {
     let active = true;
@@ -92,7 +95,27 @@ export default function GroupRouter() {
   }
 
   if (group?.type === "class") {
-    return <Classroom initialGroup={group} />;
+    return (
+      <>
+        <Classroom
+          key={classRefreshKey}
+          initialGroup={group}
+        />
+
+        <ClassJoinRequests
+          groupId={groupId}
+          role={
+            group?.membership?.role ||
+            "member"
+          }
+          onResolved={() =>
+            setClassRefreshKey(
+              (current) => current + 1
+            )
+          }
+        />
+      </>
+    );
   }
 
   return <Group />;
