@@ -143,8 +143,8 @@ export default function ClassJoinRequests({
   const styles = {
     trigger: {
       position: "fixed",
-      right: "18px",
-      top: "82px",
+      left: "18px",
+      bottom: "92px",
       zIndex: 5000,
       border: "1px solid #D9DDD9",
       borderRadius: "999px",
@@ -161,8 +161,8 @@ export default function ClassJoinRequests({
     },
     panel: {
       position: "fixed",
-      right: "18px",
-      top: "132px",
+      left: "18px",
+      bottom: "148px",
       zIndex: 5001,
       width: "min(360px, calc(100vw - 36px))",
       maxHeight: "60vh",
