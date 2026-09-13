@@ -8,6 +8,7 @@ import {
 import {
   ActivityIndicator,
   Alert,
+  FlatList,
   Image,
   Modal,
   Pressable,
@@ -16,7 +17,6 @@ import {
   Share,
   StyleSheet,
   Text,
-  useWindowDimensions,
   View
 } from "react-native";
 
@@ -97,14 +97,6 @@ export default function ClassHome() {
     params.classId || ""
   );
 
-  const { height: windowHeight } =
-    useWindowDimensions();
-
-  const assignmentPageHeight =
-    Math.max(
-      560,
-      Math.floor(windowHeight - 92)
-    );
 
   const [classData, setClassData] =
     useState(null);
@@ -127,8 +119,12 @@ export default function ClassHome() {
   const [showCreateMenu, setShowCreateMenu] =
     useState(false);
   const [
-    assignmentSectionY,
-    setAssignmentSectionY
+    classViewportHeight,
+    setClassViewportHeight
+  ] = useState(0);
+  const [
+    activeClassItemIndex,
+    setActiveClassItemIndex
   ] = useState(0);
   const [
     joinRequestCount,
@@ -622,14 +618,246 @@ export default function ClassHome() {
   const canTeach =
     canTeachClass(role);
 
-  return (
-    <SafeAreaView
-      style={styles.safe}
-    >
-      <View style={styles.header}>
-        <Pressable
-          onPress={() => router.back()}
+  const classItems = [
+    ...assignments,
+    ...(generalDiscussion
+      ? [{
+          id: `general_${generalDiscussion.id}`,
+          type: "general_discussion",
+          discussion: generalDiscussion
+        }]
+      : [])
+  ];
+
+  function handleClassItemMomentum(event) {
+    if (!classViewportHeight) return;
+
+    const next = Math.max(
+      0,
+      Math.min(
+        classItems.length - 1,
+        Math.round(
+          event.nativeEvent.contentOffset.y /
+            classViewportHeight
+        )
+      )
+    );
+
+    setActiveClassItemIndex(next);
+
+    if (next < assignments.length) {
+      setAssignmentIndex(next);
+    }
+  }
+
+  function renderClassItem({ item, index }) {
+    if (item.type === "general_discussion") {
+      return (
+        <View
+          style={[
+            styles.classItemPage,
+            { height: classViewportHeight }
+          ]}
         >
+          <View style={styles.assignmentCard}>
+            <View>
+              <Text style={styles.assignmentEyebrow}>
+                CLASS DISCUSSION
+              </Text>
+              <Text style={styles.assignmentTitle}>
+                General Class Discussion
+              </Text>
+              <Text style={styles.author}>
+                Class-wide conversation
+              </Text>
+            </View>
+
+            <View style={styles.discussionBody}>
+              <Text style={styles.instructions}>
+                {item.discussion?.body ||
+                  "A shared discussion space for the entire class."}
+              </Text>
+            </View>
+
+            <View style={styles.cardFooter}>
+              <Pressable
+                onPress={openDiscussion}
+                style={styles.readButton}
+              >
+                <Text style={styles.readButtonText}>
+                  Open Discussion
+                </Text>
+              </Pressable>
+            </View>
+
+            <Text style={styles.pageSwipeHint}>
+              Swipe up or down for another class item
+            </Text>
+          </View>
+        </View>
+      );
+    }
+
+    return (
+      <View
+        style={[
+          styles.classItemPage,
+          { height: classViewportHeight }
+        ]}
+      >
+        <View style={styles.assignmentCard}>
+          <View style={styles.bookRow}>
+            {!!item.image && (
+              <Image
+                source={{ uri: item.image }}
+                style={styles.cover}
+              />
+            )}
+
+            <View style={{ flex: 1 }}>
+              <Text style={styles.assignmentEyebrow}>
+                {item.type === "test"
+                  ? "TEST"
+                  : "READING ASSIGNMENT"}
+              </Text>
+              <Text style={styles.assignmentTitle}>
+                {item.title}
+              </Text>
+              {!!item.author && (
+                <Text style={styles.author}>
+                  {item.author}
+                </Text>
+              )}
+            </View>
+          </View>
+
+          {!!item.instructions && (
+            <Text
+              numberOfLines={5}
+              style={styles.instructions}
+            >
+              {item.instructions}
+            </Text>
+          )}
+
+          <View style={styles.assignmentMeta}>
+            <Meta
+              label="Due"
+              value={formatDue(item.dueAt)}
+            />
+
+            {item.type === "test" ? (
+              <>
+                <Meta
+                  label="Questions"
+                  value={String(
+                    item.questionCount ||
+                    item.questions?.length ||
+                    0
+                  )}
+                />
+                <Meta
+                  label="Points"
+                  value={String(item.totalPoints)}
+                />
+              </>
+            ) : (
+              <>
+                <Meta
+                  label="Paragraphs"
+                  value={
+                    item.endParagraphIndex === null
+                      ? `${item.startParagraphIndex + 1} → end`
+                      : `${item.startParagraphIndex + 1}–${item.endParagraphIndex + 1}`
+                  }
+                />
+                <Meta
+                  label="Points"
+                  value={String(item.totalPoints)}
+                />
+                <Meta
+                  label="Progress"
+                  value={`${assignmentReadingPercent(
+                    item,
+                    currentProgressByBook[
+                      String(item.bookId)
+                    ] || null
+                  )}%`}
+                />
+              </>
+            )}
+          </View>
+
+          <View style={styles.cardFooter}>
+            <Pressable
+              onPress={() => openAssignment(item)}
+              style={styles.readButton}
+            >
+              <Text style={styles.readButtonText}>
+                {item.type === "test"
+                  ? canTeach
+                    ? "Manage Test"
+                    : "Take Test"
+                  : canTeach
+                    ? "Open Reading"
+                    : "Start Assignment"}
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() =>
+                router.push({
+                  pathname:
+                    "/class/assignment-discussions",
+                  params: {
+                    classId,
+                    assignmentId: item.id,
+                    assignmentTitle: item.title
+                  }
+                })
+              }
+              style={styles.discussionButton}
+            >
+              <Text style={styles.secondaryButtonText}>
+                Discussions
+              </Text>
+            </Pressable>
+
+            {canTeach && (
+              <View style={styles.teacherActions}>
+                <Pressable
+                  onPress={() => editAssignment(item)}
+                  style={styles.secondaryButton}
+                >
+                  <Text style={styles.secondaryButtonText}>
+                    Edit
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={() => confirmDelete(item)}
+                  style={styles.deleteButton}
+                >
+                  <Text style={styles.deleteButtonText}>
+                    Delete
+                  </Text>
+                </Pressable>
+              </View>
+            )}
+          </View>
+
+          <Text style={styles.pageSwipeHint}>
+            Swipe up or down for another class item
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.safe}>
+      <View style={styles.header}>
+        <Pressable onPress={() => router.back()}>
           <Text style={styles.back}>
             ‹ My Classes
           </Text>
@@ -642,8 +870,7 @@ export default function ClassHome() {
           numberOfLines={1}
           style={styles.title}
         >
-          {classData?.name ||
-            "Class"}
+          {classData?.name || "Class"}
         </Text>
 
         <View style={styles.headerMeta}>
@@ -660,38 +887,28 @@ export default function ClassHome() {
           </Text>
         </View>
 
-        <View style={styles.actions}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.actions}
+        >
           <Pressable
             onPress={() =>
               router.push({
-                pathname:
-                  "/class/students",
+                pathname: "/class/students",
                 params: { classId }
               })
             }
             style={styles.smallButton}
           >
-            <Text
-              style={
-                styles.smallButtonText
-              }
-            >
+            <Text style={styles.smallButtonText}>
               Students
             </Text>
 
             {joinRequestCount > 0 && (
-              <View
-                style={
-                  styles.studentRequestBadge
-                }
-              >
-                <Text
-                  style={
-                    styles.studentRequestBadgeText
-                  }
-                >
-                  🔔
-                  {joinRequestCount}
+              <View style={styles.studentRequestBadge}>
+                <Text style={styles.studentRequestBadgeText}>
+                  🔔{joinRequestCount}
                 </Text>
               </View>
             )}
@@ -701,11 +918,7 @@ export default function ClassHome() {
             onPress={shareClassroom}
             style={styles.smallButton}
           >
-            <Text
-              style={
-                styles.smallButtonText
-              }
-            >
+            <Text style={styles.smallButtonText}>
               Share
             </Text>
           </Pressable>
@@ -713,18 +926,13 @@ export default function ClassHome() {
           <Pressable
             onPress={() =>
               router.push({
-                pathname:
-                  "/class/progress",
+                pathname: "/class/progress",
                 params: { classId }
               })
             }
             style={styles.smallButton}
           >
-            <Text
-              style={
-                styles.smallButtonText
-              }
-            >
+            <Text style={styles.smallButtonText}>
               Progress
             </Text>
           </Pressable>
@@ -732,18 +940,13 @@ export default function ClassHome() {
           <Pressable
             onPress={() =>
               router.push({
-                pathname:
-                  "/class/tests",
+                pathname: "/class/tests",
                 params: { classId }
               })
             }
             style={styles.smallButton}
           >
-            <Text
-              style={
-                styles.smallButtonText
-              }
-            >
+            <Text style={styles.smallButtonText}>
               Tests
             </Text>
           </Pressable>
@@ -751,18 +954,13 @@ export default function ClassHome() {
           <Pressable
             onPress={() =>
               router.push({
-                pathname:
-                  "/class/grades",
+                pathname: "/class/grades",
                 params: { classId }
               })
             }
             style={styles.smallButton}
           >
-            <Text
-              style={
-                styles.smallButtonText
-              }
-            >
+            <Text style={styles.smallButtonText}>
               Grades
             </Text>
           </Pressable>
@@ -771,51 +969,20 @@ export default function ClassHome() {
             <Pressable
               onPress={() =>
                 router.push({
-                  pathname:
-                    "/class/settings",
-                  params: {
-                    classId
-                  }
+                  pathname: "/class/settings",
+                  params: { classId }
                 })
               }
-              style={
-                styles.smallButton
-              }
+              style={styles.smallButton}
             >
-              <Text
-                style={
-                  styles.smallButtonText
-                }
-              >
+              <Text style={styles.smallButtonText}>
                 Settings
               </Text>
             </Pressable>
           )}
-        </View>
+        </ScrollView>
       </View>
 
-
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        decelerationRate="fast"
-        snapToAlignment="start"
-        snapToOffsets={
-          assignmentSectionY > 0 &&
-          assignments.length
-            ? [
-                0,
-                ...assignments.map(
-                  (_, index) =>
-                    assignmentSectionY +
-                    index *
-                      assignmentPageHeight
-                )
-              ]
-            : undefined
-        }
-      >
       {!!status && (
         <Text style={styles.status}>
           {status}
@@ -825,11 +992,11 @@ export default function ClassHome() {
       <View style={styles.assignmentToolbar}>
         <View style={{ flex: 1 }}>
           <Text style={styles.sectionTitle}>
-            Assignments
+            Class Items
           </Text>
           <Text style={styles.sectionSub}>
-            {assignments.length
-              ? `${assignments.length} class ${assignments.length === 1 ? "item" : "items"} · swipe vertically`
+            {classItems.length
+              ? `${classItems.length} ${classItems.length === 1 ? "item" : "items"} · Swipe up or down`
               : "No class work yet"}
           </Text>
         </View>
@@ -841,7 +1008,9 @@ export default function ClassHome() {
               style={styles.addButton}
               accessibilityLabel="Add class work"
             >
-              <Text style={styles.addButtonText}>+</Text>
+              <Text style={styles.addButtonText}>
+                + Add
+              </Text>
             </Pressable>
 
             <Modal
@@ -849,12 +1018,16 @@ export default function ClassHome() {
               transparent
               animationType="fade"
               statusBarTranslucent
-              onRequestClose={() => setShowCreateMenu(false)}
+              onRequestClose={() =>
+                setShowCreateMenu(false)
+              }
             >
               <View style={styles.createMenuOverlay}>
                 <Pressable
                   style={styles.createMenuBackdrop}
-                  onPress={() => setShowCreateMenu(false)}
+                  onPress={() =>
+                    setShowCreateMenu(false)
+                  }
                 />
 
                 <View style={styles.createMenu}>
@@ -895,250 +1068,75 @@ export default function ClassHome() {
       </View>
 
       <View
-        style={styles.assignmentList}
+        style={styles.classViewport}
         onLayout={(event) => {
-          const y = Math.floor(
-            event.nativeEvent.layout.y
+          const height = Math.floor(
+            event.nativeEvent.layout.height
           );
 
           if (
-            y > 0 &&
-            y !== assignmentSectionY
+            height > 0 &&
+            height !== classViewportHeight
           ) {
-            setAssignmentSectionY(y);
+            setClassViewportHeight(height);
           }
         }}
       >
-        {!assignments.length ? (
+        {!classItems.length ? (
           <View style={styles.emptyWrap}>
             <Text style={styles.emptyTitle}>
-              No assignments yet
+              No class items yet
             </Text>
             <Text style={styles.emptyText}>
               {canTeach
-                ? "Use + to add a reading assignment, test, or discussion."
-                : "Your teacher has not posted a reading assignment yet."}
+                ? "Use + Add to create a reading assignment, test, or discussion."
+                : "Your teacher has not posted class work yet."}
             </Text>
-
-            {canTeach && (
-              <Pressable
-                onPress={() =>
-                  setShowCreateMenu(true)
-                }
-                style={styles.emptyButton}
-              >
-                <Text style={styles.emptyButtonText}>
-                  Add Class Work
-                </Text>
-              </Pressable>
-            )}
           </View>
         ) : (
-          assignments.map((item, index) => (
-            <View
-              key={String(item.id)}
-              onTouchStart={() =>
-                setAssignmentIndex(index)
-              }
-              style={[
-                styles.assignmentPage,
-                {
-                  height:
-                    assignmentPageHeight
-                }
-              ]}
-            >
-              <View style={styles.assignmentCard}>
-                <View style={styles.bookRow}>
-                  {!!item.image && (
-                    <Image
-                      source={{ uri: item.image }}
-                      style={styles.cover}
-                    />
-                  )}
+          !!classViewportHeight && (
+            <FlatList
+              data={classItems}
+              key={`class-items-${classViewportHeight}-${classItems.length}`}
+              keyExtractor={(item) => String(item.id)}
+              renderItem={renderClassItem}
+              showsVerticalScrollIndicator={false}
+              snapToInterval={classViewportHeight}
+              snapToAlignment="start"
+              decelerationRate="fast"
+              disableIntervalMomentum
+              getItemLayout={(_, index) => ({
+                length: classViewportHeight,
+                offset:
+                  classViewportHeight * index,
+                index
+              })}
+              onMomentumScrollEnd={handleClassItemMomentum}
+            />
+          )
+        )}
 
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.assignmentEyebrow}>
-                      {item.type === "test"
-                        ? "TEST"
-                        : "READING ASSIGNMENT"}
-                    </Text>
-                    <Text style={styles.assignmentTitle}>
-                      {item.title}
-                    </Text>
-                    {!!item.author && (
-                      <Text style={styles.author}>
-                        {item.author}
-                      </Text>
-                    )}
-                  </View>
-                </View>
-
-                {!!item.instructions && (
-                  <Text style={styles.instructions}>
-                    {item.instructions}
-                  </Text>
-                )}
-
-                <View style={styles.assignmentMeta}>
-                  <Meta
-                    label="Due"
-                    value={formatDue(item.dueAt)}
-                  />
-
-                  {item.type === "test" ? (
-                    <>
-                      <Meta
-                        label="Questions"
-                        value={String(
-                          item.questionCount ||
-                          item.questions?.length ||
-                          0
-                        )}
-                      />
-                      <Meta
-                        label="Points"
-                        value={String(item.totalPoints)}
-                      />
-                    </>
-                  ) : (
-                    <>
-                      <Meta
-                        label="Paragraphs"
-                        value={
-                          item.endParagraphIndex === null
-                            ? `${item.startParagraphIndex + 1} → end`
-                            : `${item.startParagraphIndex + 1}–${item.endParagraphIndex + 1}`
-                        }
-                      />
-                      <Meta
-                        label="Points"
-                        value={String(item.totalPoints)}
-                      />
-                      <Meta
-                        label="Progress"
-                        value={`${assignmentReadingPercent(
-                          item,
-                          currentProgressByBook[
-                            String(item.bookId)
-                          ] || null
-                        )}%`}
-                      />
-                    </>
-                  )}
-                </View>
-
-                <View style={styles.cardFooter}>
-                  <Pressable
-                    onPress={() =>
-                      openAssignment(item)
-                    }
-                    style={styles.readButton}
-                  >
-                    <Text style={styles.readButtonText}>
-                      {item.type === "test"
-                        ? canTeach
-                          ? "Manage Test"
-                          : "Take Test"
-                        : canTeach
-                          ? "Open Reading"
-                          : "Start Assignment"}
-                    </Text>
-                  </Pressable>
-
-                  <Pressable
-                    onPress={() =>
-                      router.push({
-                        pathname:
-                          "/class/assignment-discussions",
-                        params: {
-                          classId,
-                          assignmentId:
-                            item.id,
-                          assignmentTitle:
-                            item.title
-                        }
-                      })
-                    }
-                    style={styles.secondaryButton}
-                  >
-                    <Text style={styles.secondaryButtonText}>
-                      Discussions
-                    </Text>
-                  </Pressable>
-
-                  {canTeach && (
-                    <View style={styles.teacherActions}>
-                      <Pressable
-                        onPress={() =>
-                          editAssignment(item)
-                        }
-                        style={styles.secondaryButton}
-                      >
-                        <Text style={styles.secondaryButtonText}>
-                          Edit
-                        </Text>
-                      </Pressable>
-
-                      <Pressable
-                        onPress={() =>
-                          confirmDelete(item)
-                        }
-                        style={styles.deleteButton}
-                      >
-                        <Text style={styles.deleteButtonText}>
-                          Delete
-                        </Text>
-                      </Pressable>
-                    </View>
-                  )}
-                </View>
-              </View>
-
-              {index < assignments.length - 1 && (
-                <Text style={styles.verticalSwipeHint}>
-                  Swipe up for next class item
-                </Text>
-              )}
-            </View>
-          ))
+        {classItems.length > 1 && (
+          <View
+            pointerEvents="none"
+            style={styles.verticalDots}
+          >
+            {classItems
+              .slice(0, 12)
+              .map((item, index) => (
+                <View
+                  key={String(item.id)}
+                  style={[
+                    styles.dot,
+                    index === activeClassItemIndex &&
+                      styles.dotActive
+                  ]}
+                />
+              ))}
+          </View>
         )}
       </View>
 
-      <Pressable
-        onPress={openDiscussion}
-        disabled={!generalDiscussion}
-        style={styles.discussionBar}
-      >
-        <View style={{ flex: 1 }}>
-          <Text
-            style={
-              styles.discussionLabel
-            }
-          >
-            General Class Discussion
-          </Text>
-          <Text
-            numberOfLines={1}
-            style={
-              styles.discussionSub
-            }
-          >
-            {generalDiscussion
-              ? "Open class-wide discussion"
-              : "Discussion unavailable"}
-          </Text>
-        </View>
-        <Text
-          style={
-            styles.discussionArrow
-          }
-        >
-          ›
-        </Text>
-      </Pressable>
-
-      </ScrollView>
       <BottomNav active="groups" />
     </SafeAreaView>
   );
@@ -1170,7 +1168,7 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: 16,
     paddingTop: 12,
-    paddingBottom: 12,
+    paddingBottom: 10,
     backgroundColor: BRAND.surface,
     borderBottomWidth: 1,
     borderBottomColor: BRAND.line
@@ -1216,9 +1214,9 @@ const styles = StyleSheet.create({
     fontSize: 11
   },
   actions: {
-    flexDirection: "row",
     gap: 8,
-    marginTop: 10
+    paddingTop: 10,
+    paddingRight: 8
   },
   smallButton: {
     position: "relative",
@@ -1241,8 +1239,7 @@ const styles = StyleSheet.create({
     height: 22,
     paddingHorizontal: 4,
     borderRadius: 999,
-    backgroundColor:
-      BRAND.yellow,
+    backgroundColor: BRAND.yellow,
     alignItems: "center",
     justifyContent: "center"
   },
@@ -1254,7 +1251,7 @@ const styles = StyleSheet.create({
   status: {
     color: BRAND.tealDark,
     backgroundColor: "#FFF8DF",
-    padding: 8,
+    padding: 7,
     textAlign: "center"
   },
   assignmentToolbar: {
@@ -1262,8 +1259,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
     paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 9
+    paddingVertical: 10,
+    backgroundColor: BRAND.background,
+    borderBottomWidth: 1,
+    borderBottomColor: BRAND.line
   },
   sectionTitle: {
     color: BRAND.ink,
@@ -1276,18 +1275,18 @@ const styles = StyleSheet.create({
     marginTop: 2
   },
   addButton: {
-    width: 44,
-    height: 44,
+    minWidth: 74,
+    height: 40,
+    paddingHorizontal: 14,
     backgroundColor: BRAND.primary,
-    borderRadius: 14,
+    borderRadius: 13,
     alignItems: "center",
     justifyContent: "center"
   },
   addButtonText: {
     color: "#FFF",
     fontWeight: "900",
-    fontSize: 22,
-    lineHeight: 24
+    fontSize: 13
   },
   createMenuWrap: {
     position: "relative"
@@ -1326,18 +1325,161 @@ const styles = StyleSheet.create({
     color: BRAND.ink,
     fontWeight: "900"
   },
-  scroll: {
-    flex: 1
+  classViewport: {
+    flex: 1,
+    position: "relative"
   },
-  scrollContent: {
-    flexGrow: 1,
-    paddingBottom: 18
+  classItemPage: {
+    paddingHorizontal: 16,
+    paddingVertical: 14
   },
-  assignmentList: {
-    paddingBottom: 8
+  assignmentCard: {
+    flex: 1,
+    backgroundColor: BRAND.surface,
+    borderWidth: 1,
+    borderColor: BRAND.line,
+    borderRadius: 24,
+    padding: 20
+  },
+  bookRow: {
+    flexDirection: "row",
+    gap: 13
+  },
+  cover: {
+    width: 76,
+    height: 110,
+    borderRadius: 9,
+    backgroundColor: "#E8EEEE"
+  },
+  assignmentEyebrow: {
+    color: BRAND.tealDark,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1
+  },
+  assignmentTitle: {
+    color: BRAND.ink,
+    fontSize: 24,
+    fontWeight: "900",
+    marginTop: 4
+  },
+  author: {
+    color: BRAND.muted,
+    marginTop: 5,
+    fontSize: 14
+  },
+  instructions: {
+    color: BRAND.ink,
+    lineHeight: 21,
+    marginTop: 16
+  },
+  discussionBody: {
+    flex: 1,
+    justifyContent: "center"
+  },
+  assignmentMeta: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 18
+  },
+  metaBox: {
+    flex: 1,
+    minWidth: 0,
+    backgroundColor: BRAND.background,
+    borderRadius: 11,
+    padding: 9
+  },
+  metaLabel: {
+    color: BRAND.muted,
+    fontSize: 9,
+    fontWeight: "800"
+  },
+  metaValue: {
+    color: BRAND.ink,
+    fontSize: 11,
+    fontWeight: "900",
+    marginTop: 3
+  },
+  cardFooter: {
+    marginTop: "auto",
+    paddingTop: 14
+  },
+  readButton: {
+    minHeight: 46,
+    borderRadius: 13,
+    backgroundColor: BRAND.primary,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  readButtonText: {
+    color: "#FFF",
+    fontWeight: "900"
+  },
+  discussionButton: {
+    minHeight: 42,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: BRAND.teal,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  teacherActions: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 8
+  },
+  secondaryButton: {
+    flex: 1,
+    minHeight: 40,
+    borderWidth: 1,
+    borderColor: BRAND.teal,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  secondaryButtonText: {
+    color: BRAND.tealDark,
+    fontWeight: "900"
+  },
+  deleteButton: {
+    flex: 1,
+    minHeight: 40,
+    borderWidth: 1,
+    borderColor: BRAND.line,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  deleteButtonText: {
+    color: BRAND.danger,
+    fontWeight: "900"
+  },
+  pageSwipeHint: {
+    color: BRAND.muted,
+    fontSize: 10,
+    textAlign: "center",
+    marginTop: 9
+  },
+  verticalDots: {
+    position: "absolute",
+    right: 5,
+    top: "42%",
+    gap: 5
+  },
+  dot: {
+    width: 5,
+    height: 5,
+    borderRadius: 999,
+    backgroundColor: "#C5CECF"
+  },
+  dotActive: {
+    width: 8,
+    height: 8,
+    backgroundColor: BRAND.tealDark
   },
   emptyWrap: {
-    minHeight: 240,
+    flex: 1,
     alignItems: "center",
     justifyContent: "center",
     padding: 30
@@ -1352,160 +1494,5 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 20,
     marginTop: 8
-  },
-  emptyButton: {
-    backgroundColor: BRAND.primary,
-    borderRadius: 12,
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    marginTop: 16
-  },
-  emptyButtonText: {
-    color: "#FFF",
-    fontWeight: "900"
-  },
-  assignmentPage: {
-    paddingHorizontal: 16,
-    paddingVertical: 18,
-    justifyContent: "center"
-  },
-  verticalSwipeHint: {
-    color: BRAND.muted,
-    fontSize: 11,
-    textAlign: "center",
-    marginTop: 8
-  },
-  assignmentCard: {
-    flex: 1,
-    backgroundColor: BRAND.surface,
-    borderWidth: 1,
-    borderColor: BRAND.line,
-    borderRadius: 22,
-    padding: 18
-  },
-  bookRow: {
-    flexDirection: "row",
-    gap: 13
-  },
-  cover: {
-    width: 68,
-    height: 98,
-    borderRadius: 8,
-    backgroundColor: "#E8EEEE"
-  },
-  assignmentEyebrow: {
-    color: BRAND.tealDark,
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 1
-  },
-  assignmentTitle: {
-    color: BRAND.ink,
-    fontSize: 22,
-    fontWeight: "900",
-    marginTop: 4
-  },
-  author: {
-    color: BRAND.muted,
-    marginTop: 5
-  },
-  instructions: {
-    color: BRAND.ink,
-    lineHeight: 21,
-    marginTop: 16
-  },
-  assignmentMeta: {
-    flexDirection: "row",
-    gap: 8,
-    marginTop: 18
-  },
-  metaBox: {
-    flex: 1,
-    backgroundColor: BRAND.background,
-    borderRadius: 11,
-    padding: 9
-  },
-  metaLabel: {
-    color: BRAND.muted,
-    fontSize: 10,
-    fontWeight: "800"
-  },
-  metaValue: {
-    color: BRAND.ink,
-    fontSize: 12,
-    fontWeight: "900",
-    marginTop: 3
-  },
-  cardFooter: {
-    marginTop: "auto",
-    paddingTop: 16
-  },
-  readButton: {
-    minHeight: 48,
-    borderRadius: 13,
-    backgroundColor: BRAND.primary,
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  readButtonText: {
-    color: "#FFF",
-    fontWeight: "900"
-  },
-  teacherActions: {
-    flexDirection: "row",
-    gap: 8,
-    marginTop: 9
-  },
-  secondaryButton: {
-    flex: 1,
-    minHeight: 42,
-    borderWidth: 1,
-    borderColor: BRAND.teal,
-    borderRadius: 11,
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  secondaryButtonText: {
-    color: BRAND.tealDark,
-    fontWeight: "900"
-  },
-  deleteButton: {
-    flex: 1,
-    minHeight: 42,
-    borderWidth: 1,
-    borderColor: BRAND.line,
-    borderRadius: 11,
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  deleteButtonText: {
-    color: BRAND.danger,
-    fontWeight: "900"
-  },
-  discussionBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginHorizontal: 16,
-    marginBottom: 8,
-    padding: 13,
-    borderWidth: 1,
-    borderColor: BRAND.line,
-    borderRadius: 14,
-    backgroundColor: BRAND.surface
-  },
-  discussionLabel: {
-    color: BRAND.ink,
-    fontWeight: "900"
-  },
-  discussionSub: {
-    color: BRAND.muted,
-    fontSize: 11,
-    marginTop: 2
-  },
-  discussionArrow: {
-    color: BRAND.tealDark,
-    fontSize: 24,
-    fontWeight: "900"
   }
 });
