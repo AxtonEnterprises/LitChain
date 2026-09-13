@@ -47,6 +47,7 @@ export default function Groups() {
   const [status, setStatus] = useState("");
   const [viewportHeight, setViewportHeight] = useState(0);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [openSwipeStart, setOpenSwipeStart] = useState(null);
 
   async function load() {
     try {
@@ -145,6 +146,50 @@ export default function Groups() {
         description: item.description || ""
       }
     });
+  }
+
+  function beginOpenSwipe(event, item) {
+    if (!item?.membership) return;
+
+    const touch = event.nativeEvent?.touches?.[0];
+    if (!touch) return;
+
+    setOpenSwipeStart({
+      groupId: String(item.id),
+      x: touch.pageX,
+      y: touch.pageY
+    });
+  }
+
+  function finishOpenSwipe(event, item) {
+    if (
+      !item?.membership ||
+      !openSwipeStart ||
+      openSwipeStart.groupId !== String(item.id)
+    ) {
+      setOpenSwipeStart(null);
+      return;
+    }
+
+    const touch =
+      event.nativeEvent?.changedTouches?.[0];
+
+    setOpenSwipeStart(null);
+
+    if (!touch) return;
+
+    const deltaX =
+      touch.pageX - openSwipeStart.x;
+    const deltaY =
+      touch.pageY - openSwipeStart.y;
+
+    if (
+      deltaX < -70 &&
+      Math.abs(deltaX) >
+        Math.abs(deltaY)
+    ) {
+      open(item);
+    }
   }
 
   function create() {
@@ -484,12 +529,18 @@ export default function Groups() {
                     }
                   ]}
                 >
-                  <Pressable
-                    onPress={() =>
-                      open(item)
+                  <View
+                    onTouchStart={(event) =>
+                      beginOpenSwipe(
+                        event,
+                        item
+                      )
                     }
-                    disabled={
-                      view === "discoverable"
+                    onTouchEnd={(event) =>
+                      finishOpenSwipe(
+                        event,
+                        item
+                      )
                     }
                     style={styles.card}
                   >
@@ -600,11 +651,11 @@ export default function Groups() {
                             styles.openHint
                           }
                         >
-                          Tap to open ›
+                          Swipe left to open
                         </Text>
                       )}
                     </View>
-                  </Pressable>
+                  </View>
                 </View>
               );
             }}
