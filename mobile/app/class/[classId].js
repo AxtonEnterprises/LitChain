@@ -28,7 +28,10 @@ import {
 
 import {
   collection,
-  getDocs
+  doc,
+  getDocs,
+  serverTimestamp,
+  updateDoc
 } from "firebase/firestore";
 
 import BottomNav from "../../components/BottomNav";
@@ -49,6 +52,10 @@ import {
   deleteNativeClassAssignment,
   getNativeClassAssignments
 } from "../../services/classAssignments";
+
+import {
+  getNativeClassTests
+} from "../../services/classTests";
 
 import {
   assignmentReadingPercent,
@@ -136,12 +143,31 @@ export default function ClassHome() {
       const [
         loadedClass,
         loadedMembers,
-        loadedAssignments
+        loadedAssignments,
+        loadedTests
       ] = await Promise.all([
         getNativeClass(classId),
         getNativeClassMembers(classId),
-        getNativeClassAssignments(classId)
+        getNativeClassAssignments(classId),
+        getNativeClassTests(classId)
       ]);
+
+      const loadedClassItems = [
+        ...loadedAssignments,
+        ...loadedTests
+      ].sort((a, b) =>
+        String(
+          b.updatedAtISO ||
+          b.createdAtISO ||
+          ""
+        ).localeCompare(
+          String(
+            a.updatedAtISO ||
+            a.createdAtISO ||
+            ""
+          )
+        )
+      );
 
       try {
         await syncNativeClassReadingProgress(classId);
@@ -175,6 +201,67 @@ export default function ClassHome() {
           await ensureNativeGeneralClassDiscussion(
             classId
           );
+      }
+
+      if (
+        canTeachClass(
+          loadedClass.membership?.role
+        )
+      ) {
+        try {
+          const postsSnapshot =
+            await getDocs(
+              collection(
+                db,
+                "groups",
+                classId,
+                "forumPosts"
+              )
+            );
+
+          await Promise.allSettled(
+            postsSnapshot.docs
+              .map((postDoc) => ({
+                id: postDoc.id,
+                ...postDoc.data()
+              }))
+              .filter(
+                (post) =>
+                  post.assignmentId &&
+                  !post.sourceAssignmentId &&
+                  post.isGeneralClassDiscussion !== true
+              )
+              .map((post) =>
+                updateDoc(
+                  doc(
+                    db,
+                    "groups",
+                    classId,
+                    "forumPosts",
+                    String(post.id)
+                  ),
+                  {
+                    sourceAssignmentId:
+                      String(post.assignmentId),
+                    sourceAssignmentTitle:
+                      String(
+                        post.assignmentTitle ||
+                        ""
+                      ),
+                    updatedAtISO:
+                      new Date().toISOString(),
+                    updatedAt:
+                      serverTimestamp()
+                  }
+                )
+              )
+          );
+        } catch (error) {
+          console.warn(
+            "Class discussion parity migration:",
+            error?.code || error
+          );
+        }
       }
 
       let pendingJoinRequests = 0;
@@ -219,7 +306,7 @@ export default function ClassHome() {
       setClassData(loadedClass);
       setMembers(loadedMembers);
       setAssignments(
-        loadedAssignments
+        loadedClassItems
       );
       setProgressRows(
         loadedProgress
@@ -232,7 +319,7 @@ export default function ClassHome() {
           Math.max(
             0,
             Math.min(
-              loadedAssignments.length - 1,
+              loadedClassItems.length - 1,
               current
             )
           )
@@ -379,6 +466,17 @@ export default function ClassHome() {
   function editAssignment(
     assignment
   ) {
+    if (assignment?.type === "test") {
+      router.push({
+        pathname: "/class/test-edit",
+        params: {
+          classId,
+          assignmentId: assignment.id
+        }
+      });
+      return;
+    }
+
     router.push({
       pathname:
         "/class/assignment-edit",
@@ -393,6 +491,19 @@ export default function ClassHome() {
   function openAssignment(
     assignment
   ) {
+    if (assignment?.type === "test") {
+      router.push({
+        pathname: canTeach
+          ? "/class/test-edit"
+          : "/class/test",
+        params: {
+          classId,
+          assignmentId: assignment.id
+        }
+      });
+      return;
+    }
+
     router.push({
       pathname: "/reader/[bookId]",
       params: {
@@ -832,7 +943,7 @@ export default function ClassHome() {
               style={[
                 styles.assignmentPage,
                 {
-                  minHeight:
+                  height:
                     assignmentPageHeight
                 }
               ]}
@@ -848,7 +959,9 @@ export default function ClassHome() {
 
                   <View style={{ flex: 1 }}>
                     <Text style={styles.assignmentEyebrow}>
-                      READING ASSIGNMENT
+                      {item.type === "test"
+                        ? "TEST"
+                        : "READING ASSIGNMENT"}
                     </Text>
                     <Text style={styles.assignmentTitle}>
                       {item.title}
@@ -872,27 +985,47 @@ export default function ClassHome() {
                     label="Due"
                     value={formatDue(item.dueAt)}
                   />
-                  <Meta
-                    label="Paragraphs"
-                    value={
-                      item.endParagraphIndex === null
-                        ? `${item.startParagraphIndex + 1} → end`
-                        : `${item.startParagraphIndex + 1}–${item.endParagraphIndex + 1}`
-                    }
-                  />
-                  <Meta
-                    label="Points"
-                    value={String(item.totalPoints)}
-                  />
-                  <Meta
-                    label="Progress"
-                    value={`${assignmentReadingPercent(
-                      item,
-                      currentProgressByBook[
-                        String(item.bookId)
-                      ] || null
-                    )}%`}
-                  />
+
+                  {item.type === "test" ? (
+                    <>
+                      <Meta
+                        label="Questions"
+                        value={String(
+                          item.questionCount ||
+                          item.questions?.length ||
+                          0
+                        )}
+                      />
+                      <Meta
+                        label="Points"
+                        value={String(item.totalPoints)}
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <Meta
+                        label="Paragraphs"
+                        value={
+                          item.endParagraphIndex === null
+                            ? `${item.startParagraphIndex + 1} → end`
+                            : `${item.startParagraphIndex + 1}–${item.endParagraphIndex + 1}`
+                        }
+                      />
+                      <Meta
+                        label="Points"
+                        value={String(item.totalPoints)}
+                      />
+                      <Meta
+                        label="Progress"
+                        value={`${assignmentReadingPercent(
+                          item,
+                          currentProgressByBook[
+                            String(item.bookId)
+                          ] || null
+                        )}%`}
+                      />
+                    </>
+                  )}
                 </View>
 
                 <View style={styles.cardFooter}>
@@ -903,9 +1036,13 @@ export default function ClassHome() {
                     style={styles.readButton}
                   >
                     <Text style={styles.readButtonText}>
-                      {canTeach
-                        ? "Open Reading"
-                        : "Start Assignment"}
+                      {item.type === "test"
+                        ? canTeach
+                          ? "Manage Test"
+                          : "Take Test"
+                        : canTeach
+                          ? "Open Reading"
+                          : "Start Assignment"}
                     </Text>
                   </Pressable>
 
@@ -1239,6 +1376,7 @@ const styles = StyleSheet.create({
     marginTop: 8
   },
   assignmentCard: {
+    flex: 1,
     backgroundColor: BRAND.surface,
     borderWidth: 1,
     borderColor: BRAND.line,
@@ -1299,6 +1437,7 @@ const styles = StyleSheet.create({
     marginTop: 3
   },
   cardFooter: {
+    marginTop: "auto",
     paddingTop: 16
   },
   readButton: {
