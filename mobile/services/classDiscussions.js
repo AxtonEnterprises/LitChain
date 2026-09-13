@@ -6,7 +6,8 @@ import {
   orderBy,
   query,
   serverTimestamp,
-  setDoc
+  setDoc,
+  updateDoc
 } from "firebase/firestore";
 
 import { auth, db } from "../lib/firebase";
@@ -53,6 +54,59 @@ async function requireClassTeacher(classId) {
   return user;
 }
 
+async function backfillPwaAssignmentSource(classId, post) {
+  if (
+    !post?.id ||
+    !post?.assignmentId ||
+    post?.sourceAssignmentId
+  ) {
+    return post;
+  }
+
+  try {
+    await updateDoc(
+      doc(
+        db,
+        "groups",
+        String(classId),
+        "forumPosts",
+        String(post.id)
+      ),
+      {
+        sourceAssignmentId:
+          String(post.assignmentId),
+        sourceAssignmentTitle:
+          String(
+            post.assignmentTitle ||
+            ""
+          ),
+        updatedAtISO:
+          new Date().toISOString(),
+        updatedAt:
+          serverTimestamp()
+      }
+    );
+
+    return {
+      ...post,
+      sourceAssignmentId:
+        String(post.assignmentId),
+      sourceAssignmentTitle:
+        String(
+          post.assignmentTitle ||
+          ""
+        )
+    };
+  } catch {
+    /*
+     * Compatibility backfill is best-effort. A teacher who did not
+     * author an older post may not have permission to rewrite it.
+     * New discussions always write both provenance fields below.
+     */
+    return post;
+  }
+}
+
 export async function getNativeAssignmentDiscussions(classId, assignmentId) {
   await requireClassMembership(classId);
 
@@ -65,18 +119,29 @@ export async function getNativeAssignmentDiscussions(classId, assignmentId) {
     snapshot = await getDocs(ref);
   }
 
-  return snapshot.docs
+  const matching = snapshot.docs
     .map((item) => ({ id: item.id, ...item.data() }))
     .filter(
       (item) =>
-        String(item.assignmentId || "") === String(assignmentId) &&
+        String(
+          item.assignmentId ||
+          item.sourceAssignmentId ||
+          ""
+        ) === String(assignmentId) &&
         item.isGeneralClassDiscussion !== true
-    )
-    .sort(
-      (a, b) =>
-        Number(b.forumScore || 0) - Number(a.forumScore || 0) ||
-        String(a.createdAtISO || "").localeCompare(String(b.createdAtISO || ""))
     );
+
+  const normalized = await Promise.all(
+    matching.map((post) =>
+      backfillPwaAssignmentSource(classId, post)
+    )
+  );
+
+  return normalized.sort(
+    (a, b) =>
+      Number(b.forumScore || 0) - Number(a.forumScore || 0) ||
+      String(a.createdAtISO || "").localeCompare(String(b.createdAtISO || ""))
+  );
 }
 
 export async function createNativeAssignmentDiscussion({
@@ -89,6 +154,8 @@ export async function createNativeAssignmentDiscussion({
   const user = await requireClassTeacher(classId);
   const cleanTitle = String(title || "").trim();
   const cleanBody = String(body || "").trim();
+  const cleanAssignmentId = String(assignmentId || "");
+  const cleanAssignmentTitle = String(assignmentTitle || "");
 
   if (cleanTitle.length < 2) throw new Error("Enter a discussion title.");
   if (!cleanBody) throw new Error("Enter a discussion message.");
@@ -99,8 +166,10 @@ export async function createNativeAssignmentDiscussion({
   const post = {
     id: ref.id,
     groupId: String(classId),
-    assignmentId: String(assignmentId),
-    assignmentTitle: String(assignmentTitle || ""),
+    assignmentId: cleanAssignmentId,
+    assignmentTitle: cleanAssignmentTitle,
+    sourceAssignmentId: cleanAssignmentId,
+    sourceAssignmentTitle: cleanAssignmentTitle,
     discussionScope: "assignment",
     userId: user.uid,
     title: cleanTitle,
