@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Modal,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -725,54 +726,59 @@ export default function ClassHome() {
         {canTeach && (
           <View style={styles.createMenuWrap}>
             <Pressable
-              onPress={() =>
-                setShowCreateMenu(
-                  (current) => !current
-                )
-              }
+              onPress={() => setShowCreateMenu(true)}
               style={styles.addButton}
               accessibilityLabel="Add class work"
             >
-              <Text
-                style={styles.addButtonText}
-              >
-                +
-              </Text>
+              <Text style={styles.addButtonText}>+</Text>
             </Pressable>
 
-            {showCreateMenu && (
-              <View style={styles.createMenu}>
+            <Modal
+              visible={showCreateMenu}
+              transparent
+              animationType="fade"
+              statusBarTranslucent
+              onRequestClose={() => setShowCreateMenu(false)}
+            >
+              <View style={styles.createMenuOverlay}>
                 <Pressable
-                  onPress={() => {
-                    setShowCreateMenu(false);
-                    createAssignment();
-                  }}
-                  style={styles.createMenuItem}
-                >
-                  <Text style={styles.createMenuText}>
-                    Reading Assignment
-                  </Text>
-                </Pressable>
+                  style={styles.createMenuBackdrop}
+                  onPress={() => setShowCreateMenu(false)}
+                />
 
-                <Pressable
-                  onPress={createTest}
-                  style={styles.createMenuItem}
-                >
-                  <Text style={styles.createMenuText}>
-                    Test
-                  </Text>
-                </Pressable>
+                <View style={styles.createMenu}>
+                  <Pressable
+                    onPress={() => {
+                      setShowCreateMenu(false);
+                      createAssignment();
+                    }}
+                    style={styles.createMenuItem}
+                  >
+                    <Text style={styles.createMenuText}>
+                      Reading Assignment
+                    </Text>
+                  </Pressable>
 
-                <Pressable
-                  onPress={createDiscussion}
-                  style={styles.createMenuItem}
-                >
-                  <Text style={styles.createMenuText}>
-                    Discussion
-                  </Text>
-                </Pressable>
+                  <Pressable
+                    onPress={createTest}
+                    style={styles.createMenuItem}
+                  >
+                    <Text style={styles.createMenuText}>
+                      Test
+                    </Text>
+                  </Pressable>
+
+                  <Pressable
+                    onPress={createDiscussion}
+                    style={styles.createMenuItem}
+                  >
+                    <Text style={styles.createMenuText}>
+                      Discussion
+                    </Text>
+                  </Pressable>
+                </View>
               </View>
-            )}
+            </Modal>
           </View>
         )}
       </View>
@@ -1147,27 +1153,33 @@ const styles = StyleSheet.create({
     lineHeight: 24
   },
   createMenuWrap: {
-    position: "relative",
-    zIndex: 40
+    position: "relative"
+  },
+  createMenuOverlay: {
+    flex: 1
+  },
+  createMenuBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.08)"
   },
   createMenu: {
     position: "absolute",
-    right: 0,
-    top: 48,
-    minWidth: 190,
+    right: 18,
+    top: 168,
+    minWidth: 210,
     backgroundColor: BRAND.surface,
     borderWidth: 1,
     borderColor: BRAND.line,
     borderRadius: 14,
     paddingVertical: 6,
     shadowColor: "#000",
-    shadowOpacity: 0.14,
-    shadowRadius: 10,
+    shadowOpacity: 0.18,
+    shadowRadius: 14,
     shadowOffset: {
       width: 0,
-      height: 5
+      height: 7
     },
-    elevation: 8
+    elevation: 24
   },
   createMenuItem: {
     paddingHorizontal: 16,
