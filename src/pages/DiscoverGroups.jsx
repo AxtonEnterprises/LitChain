@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Search, Users } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import {
+  deleteDoc,
+  doc
+} from "firebase/firestore";
 
 import {
   cancelGroupJoinRequest,
@@ -8,6 +12,11 @@ import {
   getMyGroups,
   requestToJoinGroup
 } from "../services/storage.js";
+
+import {
+  auth,
+  db
+} from "../firebase";
 
 import { getGroupAvatar } from "../data/groupAvatars.js";
 import SEO from "../components/SEO.jsx";
@@ -62,8 +71,8 @@ export default function DiscoverGroups() {
         : view === "classes"
           ? myGroups.filter((group) => group.type === "class")
           : discoverGroups;
-    const term = search.trim().toLowerCase();
 
+    const term = search.trim().toLowerCase();
     if (!term) return source;
 
     return source.filter((group) =>
@@ -79,10 +88,37 @@ export default function DiscoverGroups() {
     setSelectedIndex(0);
   }, [view, search]);
 
+  async function clearStaleJoinRequest(group) {
+    const userId = auth.currentUser?.uid || "";
+    const requestStatus = String(
+      group?.joinRequest?.status || ""
+    );
+
+    if (
+      !userId ||
+      !requestStatus ||
+      requestStatus === "pending"
+    ) {
+      return;
+    }
+
+    await deleteDoc(
+      doc(
+        db,
+        "groups",
+        String(group.id),
+        "joinRequests",
+        userId
+      )
+    );
+  }
+
   async function join(group) {
     try {
       setBusyId(group.id);
       setStatus("");
+
+      await clearStaleJoinRequest(group);
 
       const result = await requestToJoinGroup(group.id);
       await load();
@@ -93,6 +129,8 @@ export default function DiscoverGroups() {
           : `Join request sent to ${group.name}.`
       );
     } catch (error) {
+      console.error("Could not join/request group:", error);
+      await load().catch(() => {});
       setStatus(error?.message || "We couldn't join that group.");
     } finally {
       setBusyId(null);
@@ -157,12 +195,10 @@ export default function DiscoverGroups() {
     const deltaY = touch.clientY - groupSwipeStart.y;
     setGroupSwipeStart(null);
 
-    // Do not interfere with the vertical group reel.
     if (Math.abs(deltaX) < 70 || Math.abs(deltaX) <= Math.abs(deltaY)) {
       return;
     }
 
-    // Same spatial grammar as The Chain: left = deeper/open.
     if (deltaX < 0) {
       navigate(`/read/groups/${group.id}`);
     }
@@ -359,6 +395,7 @@ export default function DiscoverGroups() {
               .map((group, localIndex) => {
                 const start = Math.max(0, selectedIndex - 3);
                 const index = start + localIndex;
+
                 return (
                   <span
                     key={group.id}
