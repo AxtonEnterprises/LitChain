@@ -21,19 +21,18 @@
       "adaptiveIcon": {
         "foregroundImage": "../public/branding/lit-chain-icon-512.png",
         "backgroundColor": "#F4F8F8"
-      }
+      },
+      "googleServicesFile": "./google-services.json"
     },
     "ios": {
       "bundleIdentifier": "org.theliteraturefoundation.litchain",
       "buildNumber": "1",
       "supportsTablet": true,
-      "icon": "../public/branding/lit-chain-icon-512.png",
-      "usesAppleSignIn": true
+      "icon": "../public/branding/lit-chain-icon-512.png"
     },
     "plugins": [
       "expo-router",
       "expo-notifications",
-      "expo-apple-authentication",
       "@react-native-google-signin/google-signin"
     ],
     "extra": {

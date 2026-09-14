@@ -1,0 +1,77 @@
+{
+  "project_info": {
+    "project_number": "424669347546",
+    "firebase_url": "https://random-reads-10add-default-rtdb.firebaseio.com",
+    "project_id": "random-reads-10add",
+    "storage_bucket": "random-reads-10add.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:424669347546:android:d4a0d90b8b3207fe676fe3",
+        "android_client_info": {
+          "package_name": "Com.randomreads.android"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "424669347546-j4lef85nkgcvd3t835nkm1pen9kic1sv.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD6-yyytM9mDbHdGQqUrs46Z_x_dCuxshQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "424669347546-j4lef85nkgcvd3t835nkm1pen9kic1sv.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:424669347546:android:7811f4d776506248676fe3",
+        "android_client_info": {
+          "package_name": "org.theliteraturefoundation.litchain"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "424669347546-b9ebu6o2lp2l0alsjqi9cgcu3j0tnl8o.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "org.theliteraturefoundation.litchain",
+            "certificate_hash": "93a5c6c9c3cef657744d0889e18ea900b7452f61"
+          }
+        },
+        {
+          "client_id": "424669347546-j4lef85nkgcvd3t835nkm1pen9kic1sv.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD6-yyytM9mDbHdGQqUrs46Z_x_dCuxshQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "424669347546-j4lef85nkgcvd3t835nkm1pen9kic1sv.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
