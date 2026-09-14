@@ -11,7 +11,6 @@ import {
   View
 } from "react-native";
 import { router } from "expo-router";
-import * as AppleAuthentication from "expo-apple-authentication";
 import {
   GoogleSignin,
   isSuccessResponse
@@ -19,7 +18,6 @@ import {
 import {
   createUserWithEmailAndPassword,
   GoogleAuthProvider,
-  OAuthProvider,
   signInWithCredential,
   signInWithEmailAndPassword
 } from "firebase/auth";
@@ -32,19 +30,14 @@ export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
-  const [appleAvailable, setAppleAvailable] = useState(false);
 
   useEffect(() => {
     GoogleSignin.configure({
       webClientId:
-        process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID
+        process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ||
+        "424669347546-j4lef85nkgcvd3t835nkm1pen9kic1sv.apps.googleusercontent.com"
     });
 
-    if (Platform.OS === "ios") {
-      AppleAuthentication.isAvailableAsync()
-        .then(setAppleAvailable)
-        .catch(() => setAppleAvailable(false));
-    }
   }, []);
 
   async function finishAuth(promise) {
@@ -98,7 +91,8 @@ export default function LoginScreen() {
   async function signInGoogle() {
     await finishAuth(async () => {
       const webClientId =
-        process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+        process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ||
+        "424669347546-j4lef85nkgcvd3t835nkm1pen9kic1sv.apps.googleusercontent.com";
 
       if (!webClientId) {
         throw new Error(
@@ -137,40 +131,7 @@ export default function LoginScreen() {
     });
   }
 
-  async function signInApple() {
-    await finishAuth(async () => {
-      const result =
-        await AppleAuthentication.signInAsync({
-          requestedScopes: [
-            AppleAuthentication
-              .AppleAuthenticationScope
-              .FULL_NAME,
-            AppleAuthentication
-              .AppleAuthenticationScope
-              .EMAIL
-          ]
-        });
 
-      if (!result.identityToken) {
-        throw new Error(
-          "Apple did not return an identity token."
-        );
-      }
-
-      const provider =
-        new OAuthProvider("apple.com");
-
-      const credential =
-        provider.credential({
-          idToken: result.identityToken
-        });
-
-      await signInWithCredential(
-        auth,
-        credential
-      );
-    });
-  }
 
   return (
     <KeyboardAvoidingView
@@ -204,23 +165,7 @@ export default function LoginScreen() {
             </Text>
           </Pressable>
 
-          {appleAvailable && (
-            <AppleAuthentication.AppleAuthenticationButton
-              buttonType={
-                AppleAuthentication
-                  .AppleAuthenticationButtonType
-                  .CONTINUE
-              }
-              buttonStyle={
-                AppleAuthentication
-                  .AppleAuthenticationButtonStyle
-                  .BLACK
-              }
-              cornerRadius={14}
-              style={styles.appleButton}
-              onPress={signInApple}
-            />
-          )}
+
 
           <View style={styles.dividerRow}>
             <View style={styles.divider} />
