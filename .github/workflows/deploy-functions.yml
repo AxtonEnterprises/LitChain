@@ -24,10 +24,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node 20
+      - name: Setup Node 22
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
 
       - name: Authenticate to Google Cloud
         id: auth
@@ -44,7 +44,8 @@ jobs:
         env:
           FIREBASE_TOKEN: ${{ steps.auth.outputs.access_token }}
         run: |
-          npx firebase-tools deploy \
+          npx firebase-tools@latest deploy \
             --only functions:sendNativePushForNotification \
             --project random-reads-10add \
-            --non-interactive
+            --non-interactive \
+            --force
