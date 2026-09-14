@@ -30,19 +30,15 @@ jobs:
           node-version: "22"
 
       - name: Authenticate to Google Cloud
-        id: auth
         uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
           service_account: ${{ secrets.GCP_FIREBASE_SERVICE_ACCOUNT }}
-          token_format: access_token
 
       - name: Install Cloud Function dependencies
         run: npm install --prefix functions
 
       - name: Deploy native push notification function
-        env:
-          FIREBASE_TOKEN: ${{ steps.auth.outputs.access_token }}
         run: |
           npx firebase-tools@latest deploy \
             --only functions:sendNativePushForNotification \
