@@ -1,4 +1,4 @@
-name: Build Lit Chain Dev APK (GitHub)
+name: Build Lit Chain Android APK (GitHub + EAS)
 
 on:
   workflow_dispatch:
@@ -9,7 +9,7 @@ permissions:
 jobs:
   android:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     defaults:
       run:
@@ -18,6 +18,7 @@ jobs:
 
     env:
       CI: "1"
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
       EXPO_PUBLIC_FIREBASE_API_KEY: ${{ secrets.EXPO_PUBLIC_FIREBASE_API_KEY }}
       EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN: auth.litchain.org
       EXPO_PUBLIC_FIREBASE_PROJECT_ID: random-reads-10add
@@ -51,13 +52,13 @@ jobs:
             "platforms;android-36" \
             "build-tools;36.0.0"
 
-      - name: Install JavaScript dependencies
+      - name: Verify required build variables
         run: |
-          rm -f package-lock.json
-          npm install
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "::error::Missing GitHub secret EXPO_TOKEN"
+            exit 1
+          fi
 
-      - name: Verify required Firebase variables
-        run: |
           if [ -z "$EXPO_PUBLIC_FIREBASE_API_KEY" ]; then
             echo "::error::Missing GitHub secret EXPO_PUBLIC_FIREBASE_API_KEY"
             exit 1
@@ -68,67 +69,56 @@ jobs:
             exit 1
           fi
 
-      - name: Convert app config to Lit Chain Dev
+      - name: Install JavaScript dependencies
+        run: |
+          rm -f package-lock.json
+          npm install
+
+      - name: Verify production Android identity
         run: |
           node <<'NODE'
           const fs = require("fs");
+          const config = JSON.parse(fs.readFileSync("app.json", "utf8"));
+          const pkg = config?.expo?.android?.package;
+          const googleServicesFile = config?.expo?.android?.googleServicesFile;
 
-          const path = "app.json";
-          const config = JSON.parse(fs.readFileSync(path, "utf8"));
+          if (pkg !== "org.theliteraturefoundation.litchain") {
+            console.error(`Unexpected Android package: ${pkg}`);
+            process.exit(1);
+          }
 
-          config.expo.name = "Lit Chain Dev";
-          config.expo.slug = "lit-chain-dev";
-          config.expo.scheme = "litchaindev";
+          if (googleServicesFile !== "./google-services.json") {
+            console.error(`Unexpected googleServicesFile: ${googleServicesFile}`);
+            process.exit(1);
+          }
 
-          config.expo.android = {
-            ...(config.expo.android || {}),
-            package: "org.theliteraturefoundation.litchain.dev",
-            versionCode: 1,
-          };
-
-          fs.writeFileSync(path, JSON.stringify(config, null, 2) + "\n");
-
-          console.log("Development app identity:");
-          console.log("  name:    " + config.expo.name);
-          console.log("  package: " + config.expo.android.package);
-          console.log("  scheme:  " + config.expo.scheme);
+          console.log("Android package: " + pkg);
+          console.log("Firebase config: " + googleServicesFile);
           NODE
 
-      - name: Generate native Android project
+      - name: Build signed preview APK with EAS
         run: |
-          npx expo prebuild \
+          rm -f LitChain-Preview-latest.apk
+          npx eas-cli@latest build \
             --platform android \
-            --clean
+            --profile preview \
+            --local \
+            --non-interactive \
+            --output ./LitChain-Preview-latest.apk
 
-      - name: Make Gradle executable
-        run: chmod +x android/gradlew
-
-      - name: Build standalone Lit Chain Dev APK
-        working-directory: mobile/android
+      - name: Verify APK
         run: |
-          ./gradlew \
-            :app:assembleRelease \
-            --no-daemon \
-            --stacktrace
-
-      - name: Find APK
-        id: apk
-        run: |
-          APK_PATH="$(find android/app/build/outputs/apk/release -name '*.apk' -type f | head -n 1)"
-
-          if [ -z "$APK_PATH" ]; then
-            echo "::error::No release APK was produced."
-            find android/app/build/outputs -maxdepth 5 -type f || true
+          if [ ! -f LitChain-Preview-latest.apk ]; then
+            echo "::error::No APK was produced."
             exit 1
           fi
 
-          cp "$APK_PATH" LitChain-Dev-latest.apk
-          echo "path=mobile/LitChain-Dev-latest.apk" >> "$GITHUB_OUTPUT"
+          ls -lh LitChain-Preview-latest.apk
 
-      - name: Upload Lit Chain Dev APK
+      - name: Upload Lit Chain preview APK
         uses: actions/upload-artifact@v4
         with:
-          name: LitChain-Dev-Android-APK
-          path: ${{ steps.apk.outputs.path }}
+          name: LitChain-Android-Preview-APK
+          path: mobile/LitChain-Preview-latest.apk
           if-no-files-found: error
           retention-days: 14
