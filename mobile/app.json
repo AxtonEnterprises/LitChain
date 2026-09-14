@@ -27,10 +27,14 @@
       "bundleIdentifier": "org.theliteraturefoundation.litchain",
       "buildNumber": "1",
       "supportsTablet": true,
-      "icon": "../public/branding/lit-chain-icon-512.png"
+      "icon": "../public/branding/lit-chain-icon-512.png",
+      "usesAppleSignIn": true
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      "expo-notifications",
+      "expo-apple-authentication",
+      "@react-native-google-signin/google-signin"
     ],
     "extra": {
       "eas": {

@@ -16,9 +16,12 @@
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "^2.2.0",
+    "@react-native-google-signin/google-signin": "^16.1.5",
     "expo": "~54.0.0",
+    "expo-apple-authentication": "~8.0.8",
     "expo-constants": "~18.0.10",
     "expo-linking": "~8.0.10",
+    "expo-notifications": "~0.32.12",
     "expo-router": "~6.0.24",
     "expo-status-bar": "~3.0.8",
     "firebase": "^11.10.0",
