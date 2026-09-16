@@ -3,7 +3,7 @@
     "name": "Lit Chain",
     "slug": "lit-chain",
     "owner": "axton-enterprisess-organization",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "orientation": "portrait",
     "scheme": "litchain",
     "userInterfaceStyle": "automatic",
@@ -17,7 +17,7 @@
     },
     "android": {
       "package": "org.theliteraturefoundation.litchain",
-      "versionCode": 3,
+      "versionCode": 4,
       "adaptiveIcon": {
         "foregroundImage": "../public/branding/lit-chain-icon-512.png",
         "backgroundColor": "#F4F8F8"
@@ -26,7 +26,7 @@
     },
     "ios": {
       "bundleIdentifier": "org.theliteraturefoundation.litchain",
-      "buildNumber": "1",
+      "buildNumber": "2",
       "supportsTablet": true,
       "icon": "../public/branding/lit-chain-icon-512.png"
     },
