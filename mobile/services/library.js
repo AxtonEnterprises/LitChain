@@ -36,6 +36,31 @@ export async function hydrateNativeReadingCovers(items) {
   } catch { return books; }
 }
 
+function progressPercent(item) {
+  const value = Number(item?.percentComplete ?? item?.activePercent ?? 0);
+  return Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0));
+}
+
+function isCompleted(item) {
+  return item?.cycleComplete === true || Number(item?.completedReads || 0) > 0 || progressPercent(item) >= 100;
+}
+
+function publicTimelineItem(item) {
+  return {
+    id: String(item?.id || item?.bookId || ""),
+    bookId: String(item?.bookId || item?.id || ""),
+    title: String(item?.title || "Book"),
+    author: String(item?.author || ""),
+    image: nativeReadingCoverUrl(item),
+    percentComplete: progressPercent(item),
+    activePercent: progressPercent(item),
+    cycleComplete: item?.cycleComplete === true,
+    completedReads: Number(item?.completedReads || 0),
+    visibility: "public",
+    lastReadAtISO: String(item?.positionUpdatedAtISO || item?.updatedAtISO || item?.lastReadAtISO || "")
+  };
+}
+
 export async function getNativeReadingTimelineVisibility() {
   const user = auth.currentUser;
   if (!user) return "private";
@@ -59,6 +84,36 @@ export async function setNativeReadingTimelineVisibility(visibility) {
   return normalized;
 }
 
+/*
+ * Publish only the profile-safe reading summary needed by public reader profiles.
+ * The private users/{uid}/readingProgress collection remains owner-only.
+ * Individual books are included only when both the overall timeline and that
+ * book's readingProgress.visibility are public.
+ */
+export async function syncNativePublicProfileReadingData(bundle, timelineVisibility = "private") {
+  const user = auth.currentUser;
+  if (!user || !bundle) return;
+  const timeline = Array.isArray(bundle.timeline) ? bundle.timeline : [];
+  const journal = Array.isArray(bundle.journal) ? bundle.journal : [];
+  const isPublic = timelineVisibility === "public";
+  const publicTimeline = isPublic
+    ? timeline.filter((item) => item?.visibility === "public").map(publicTimelineItem)
+    : [];
+  const readingStats = {
+    books: timeline.length,
+    completed: timeline.filter(isCompleted).length,
+    journal: journal.length
+  };
+  await setDoc(doc(db, "publicProfiles", user.uid), {
+    userId: user.uid,
+    readingTimelineVisibility: isPublic ? "public" : "private",
+    readingStats,
+    publicReadingTimeline: publicTimeline,
+    publicReadingUpdatedAtISO: new Date().toISOString(),
+    updatedAt: serverTimestamp()
+  }, { merge: true });
+}
+
 export async function getNativeLibraryBundle() {
   const user = auth.currentUser;
   if (!user) return { profile:null,timeline:[],journal:[],savedBooks:[],savedChain:[],friends:[],friendBundle:{friends:[],incoming:[],outgoing:[]},groups:[] };
@@ -74,6 +129,6 @@ export async function getNativeLibraryBundle() {
   timeline.sort((a,b)=>String(b.positionUpdatedAtISO||b.updatedAtISO||b.lastReadAtISO||"").localeCompare(String(a.positionUpdatedAtISO||a.updatedAtISO||a.lastReadAtISO||"")));
   journal.sort((a,b)=>String(b.updatedAtISO||b.createdAt||"").localeCompare(String(a.updatedAtISO||a.createdAt||"")));
   return {profile,timeline,journal,savedBooks,savedChain,
-    friends:friendBundle.friends.map(item=>({id:item.otherUserId,otherUserId:item.otherUserId,relationshipId:item.id,...(item.profile||{})})),
+    friends:friendBundle.friends.map(item=>({id:item.otherUserId,otherUserId:item.otherUserId,relationshipId:item.id,acceptedAtISO:item.acceptedAtISO||"",...(item.profile||{})})),
     friendBundle,groups:[...groupBundle.mine,...groupBundle.classes]};
 }

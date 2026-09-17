@@ -409,3 +409,24 @@ export async function removeNativeFriend(
     otherUserId
   );
 }
+
+export async function getNativeFriendRelationship(otherUserId) {
+  const user = requireUser();
+  const other = String(otherUserId || "").trim();
+  if (!other || other === user.uid) return { status: "self" };
+  const id = pairId(user.uid, other);
+  try {
+    const snapshot = await getDoc(doc(db, "friendships", id));
+    if (!snapshot.exists()) return { id, status: "none" };
+    const data = snapshot.data();
+    return {
+      id,
+      ...data,
+      direction: data.status === "pending"
+        ? (data.requestedBy === user.uid ? "outgoing" : "incoming")
+        : "accepted"
+    };
+  } catch {
+    return { id, status: "none" };
+  }
+}
