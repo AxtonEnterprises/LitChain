@@ -1,7 +1,4 @@
-import {
-  useEffect,
-  useState
-} from "react";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -17,93 +14,95 @@ import { router } from "expo-router";
 
 import AppHeader from "../components/AppHeader";
 import BottomNav from "../components/BottomNav";
-
 import { BRAND } from "../../shared/brand";
-
-import {
-  FEATURED_PUBLIC_DOMAIN_BOOKS
-} from "../../shared/discoveryCatalog";
-
-import {
-  getNativeReadingTimeline
-} from "../services/reading";
+import { FEATURED_PUBLIC_DOMAIN_BOOKS } from "../../shared/discoveryCatalog";
+import { getNativeReadingTimeline } from "../services/reading";
 
 function authorName(book) {
-  return (
-    book?.authors?.[0]?.name ||
-    book?.author ||
-    "Unknown author"
-  );
+  return book?.authors?.[0]?.name || book?.author || "Unknown author";
 }
 
 function coverUrl(book) {
-  return (
-    book?.image ||
-    book?.cover ||
-    book?.formats?.[
-      "image/jpeg"
-    ] ||
-    ""
-  );
+  return book?.image || book?.cover || book?.formats?.["image/jpeg"] || "";
+}
+
+/*
+ * Reading-progress documents created before Discover passed the cover into
+ * Reader can legitimately have no image. Hydrate only those missing covers
+ * from Gutendex, using the Gutenberg/book id already stored in progress.
+ */
+async function hydrateTimelineCovers(items) {
+  const books = Array.isArray(items) ? items : [];
+  const missingIds = [
+    ...new Set(
+      books
+        .filter((book) => !coverUrl(book))
+        .map((book) => String(book.bookId || book.id || "").trim())
+        .filter(Boolean)
+    )
+  ];
+
+  if (!missingIds.length) return books;
+
+  try {
+    const response = await fetch(
+      `https://gutendex.com/books/?ids=${encodeURIComponent(missingIds.join(","))}`
+    );
+    if (!response.ok) return books;
+
+    const data = await response.json();
+    const results = Array.isArray(data.results) ? data.results : [];
+    const byId = new Map(results.map((book) => [String(book.id), book]));
+
+    return books.map((book) => {
+      if (coverUrl(book)) return book;
+
+      const metadata = byId.get(String(book.bookId || book.id || ""));
+      const image = coverUrl(metadata);
+
+      return image ? { ...book, image } : book;
+    });
+  } catch {
+    // Reading history should still render even if cover lookup is unavailable.
+    return books;
+  }
 }
 
 export default function DiscoverScreen() {
-  const [queryText, setQueryText] =
-    useState("");
-
-  const [searchResults, setSearchResults] =
-    useState([]);
-
-  const [randomBook, setRandomBook] =
-    useState(null);
-
-  const [timeline, setTimeline] =
-    useState([]);
-
-  const [loading, setLoading] =
-    useState(false);
+  const [queryText, setQueryText] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [randomBook, setRandomBook] = useState(null);
+  const [timeline, setTimeline] = useState([]);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    getNativeReadingTimeline()
-      .then(setTimeline);
+    let active = true;
+
+    (async () => {
+      const reading = await getNativeReadingTimeline();
+      const hydrated = await hydrateTimelineCovers(reading);
+      if (active) setTimeline(hydrated);
+    })();
 
     loadRandom();
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   async function loadRandom() {
     try {
       setLoading(true);
-
-      const page =
-        1 +
-        Math.floor(
-          Math.random() * 20
-        );
-
-      const response =
-        await fetch(
-          `https://gutendex.com/books/?languages=en&page=${page}`
-        );
-
-      const data =
-        await response.json();
-
-      const results =
-        Array.isArray(
-          data.results
-        )
-          ? data.results
-          : [];
+      const page = 1 + Math.floor(Math.random() * 20);
+      const response = await fetch(
+        `https://gutendex.com/books/?languages=en&page=${page}`
+      );
+      const data = await response.json();
+      const results = Array.isArray(data.results) ? data.results : [];
 
       if (results.length) {
-        setRandomBook(
-          results[
-            Math.floor(
-              Math.random() *
-                results.length
-            )
-          ]
-        );
+        setRandomBook(results[Math.floor(Math.random() * results.length)]);
       }
     } finally {
       setLoading(false);
@@ -111,8 +110,7 @@ export default function DiscoverScreen() {
   }
 
   async function search() {
-    const term =
-      queryText.trim();
+    const term = queryText.trim();
 
     if (!term) {
       setSearchResults([]);
@@ -121,24 +119,11 @@ export default function DiscoverScreen() {
 
     try {
       setLoading(true);
-
-      const response =
-        await fetch(
-          `https://gutendex.com/books/?languages=en&search=${encodeURIComponent(
-            term
-          )}`
-        );
-
-      const data =
-        await response.json();
-
-      setSearchResults(
-        Array.isArray(
-          data.results
-        )
-          ? data.results
-          : []
+      const response = await fetch(
+        `https://gutendex.com/books/?languages=en&search=${encodeURIComponent(term)}`
       );
+      const data = await response.json();
+      setSearchResults(Array.isArray(data.results) ? data.results : []);
     } finally {
       setLoading(false);
     }
@@ -146,33 +131,24 @@ export default function DiscoverScreen() {
 
   function openBook(book) {
     router.push({
-      pathname:
-        "/reader/[bookId]",
+      pathname: "/reader/[bookId]",
       params: {
-        bookId:
-          String(
-            book.bookId ||
-            book.id
-          ),
-        title:
-          book.title || "Book",
-        author:
-          authorName(book)
+        bookId: String(book.bookId || book.id),
+        title: book.title || "Book",
+        author: authorName(book),
+
+        // FIX: Reader persists this value into readingProgress. Without it,
+        // books opened from Discover were saved with image: null.
+        image: coverUrl(book)
       }
     });
   }
 
   function BookRow({ book }) {
-    const image =
-      coverUrl(book);
+    const image = coverUrl(book);
 
     return (
-      <Pressable
-        onPress={() =>
-          openBook(book)
-        }
-        style={styles.bookRow}
-      >
+      <Pressable onPress={() => openBook(book)} style={styles.bookRow}>
         {!!image && (
           <Image
             source={{ uri: image }}
@@ -182,17 +158,8 @@ export default function DiscoverScreen() {
         )}
 
         <View style={styles.bookInfo}>
-          <Text
-            style={styles.bookTitle}
-          >
-            {book.title}
-          </Text>
-
-          <Text
-            style={styles.bookAuthor}
-          >
-            {authorName(book)}
-          </Text>
+          <Text style={styles.bookTitle}>{book.title}</Text>
+          <Text style={styles.bookAuthor}>{authorName(book)}</Text>
         </View>
       </Pressable>
     );
@@ -208,28 +175,15 @@ export default function DiscoverScreen() {
       <View style={styles.searchRow}>
         <TextInput
           value={queryText}
-          onChangeText={
-            setQueryText
-          }
+          onChangeText={setQueryText}
           onSubmitEditing={search}
           placeholder="Search title or author"
           placeholderTextColor="#8B999B"
           style={styles.search}
         />
 
-        <Pressable
-          onPress={search}
-          style={
-            styles.searchButton
-          }
-        >
-          <Text
-            style={
-              styles.searchButtonText
-            }
-          >
-            Search
-          </Text>
+        <Pressable onPress={search} style={styles.searchButton}>
+          <Text style={styles.searchButtonText}>Search</Text>
         </Pressable>
       </View>
 
@@ -239,104 +193,41 @@ export default function DiscoverScreen() {
         </View>
       )}
 
-      <ScrollView
-        contentContainerStyle={
-          styles.content
-        }
-      >
+      <ScrollView contentContainerStyle={styles.content}>
         {!!searchResults.length && (
           <View style={styles.section}>
-            <Text
-              style={
-                styles.sectionTitle
-              }
-            >
-              Search Results
-            </Text>
-
-            {searchResults.map(
-              (book) => (
-                <BookRow
-                  key={`search-${book.id}`}
-                  book={book}
-                />
-              )
-            )}
+            <Text style={styles.sectionTitle}>Search Results</Text>
+            {searchResults.map((book) => (
+              <BookRow key={`search-${book.id}`} book={book} />
+            ))}
           </View>
         )}
 
         {!!randomBook && (
           <View style={styles.section}>
-            <View
-              style={
-                styles.sectionHeader
-              }
-            >
-              <Text
-                style={
-                  styles.sectionTitle
-                }
-              >
-                Random Read
-              </Text>
-
-              <Pressable
-                onPress={loadRandom}
-                style={
-                  styles.randomButton
-                }
-              >
-                <Text
-                  style={
-                    styles.randomButtonText
-                  }
-                >
-                  🎲 Random
-                </Text>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Random Read</Text>
+              <Pressable onPress={loadRandom} style={styles.randomButton}>
+                <Text style={styles.randomButtonText}>🎲 Random</Text>
               </Pressable>
             </View>
-
-            <BookRow
-              book={randomBook}
-            />
+            <BookRow book={randomBook} />
           </View>
         )}
 
         <View style={styles.section}>
-          <Text
-            style={styles.sectionTitle}
-          >
-            Featured
-          </Text>
-
-          {FEATURED_PUBLIC_DOMAIN_BOOKS.map(
-            (book) => (
-              <BookRow
-                key={`featured-${book.id}`}
-                book={book}
-              />
-            )
-          )}
+          <Text style={styles.sectionTitle}>Featured</Text>
+          {FEATURED_PUBLIC_DOMAIN_BOOKS.map((book) => (
+            <BookRow key={`featured-${book.id}`} book={book} />
+          ))}
         </View>
 
         {!!timeline.length && (
           <View style={styles.section}>
-            <Text
-              style={
-                styles.sectionTitle
-              }
-            >
-              Your Reading
-            </Text>
-
-            {timeline
-              .slice(0, 5)
-              .map((book) => (
-                <BookRow
-                  key={`reading-${book.id}`}
-                  book={book}
-                />
-              ))}
+            <Text style={styles.sectionTitle}>Your Reading</Text>
+            {timeline.slice(0, 5).map((book) => (
+              <BookRow key={`reading-${book.id}`} book={book} />
+            ))}
           </View>
         )}
       </ScrollView>
@@ -346,101 +237,94 @@ export default function DiscoverScreen() {
   );
 }
 
-const styles =
-  StyleSheet.create({
-    safe: {
-      flex: 1,
-      backgroundColor:
-        BRAND.background
-    },
-    searchRow: {
-      flexDirection: "row",
-      gap: 8,
-      padding: 12,
-      backgroundColor:
-        BRAND.surface
-    },
-    search: {
-      flex: 1,
-      minHeight: 46,
-      borderWidth: 1,
-      borderColor: BRAND.line,
-      borderRadius: 13,
-      paddingHorizontal: 12
-    },
-    searchButton: {
-      minWidth: 82,
-      borderRadius: 13,
-      backgroundColor:
-        BRAND.teal,
-      alignItems: "center",
-      justifyContent: "center"
-    },
-    searchButtonText: {
-      color: "#FFFFFF",
-      fontWeight: "900"
-    },
-    loader: {
-      padding: 8
-    },
-    content: {
-      padding: 14
-    },
-    section: {
-      marginBottom: 20
-    },
-    sectionHeader: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent:
-        "space-between"
-    },
-    sectionTitle: {
-      color: BRAND.ink,
-      fontSize: 22,
-      fontWeight: "900",
-      marginBottom: 10
-    },
-    randomButton: {
-      minHeight: 38,
-      paddingHorizontal: 14,
-      borderRadius: 999,
-      backgroundColor:
-        BRAND.yellow,
-      alignItems: "center",
-      justifyContent: "center",
-      marginBottom: 8
-    },
-    randomButtonText: {
-      color: BRAND.ink,
-      fontWeight: "900"
-    },
-    bookRow: {
-      backgroundColor:
-        BRAND.surface,
-      borderWidth: 1,
-      borderColor: BRAND.line,
-      borderRadius: 18,
-      padding: 12,
-      marginBottom: 10,
-      flexDirection: "row",
-      alignItems: "center"
-    },
-    cover: {
-      width: 72,
-      height: 105
-    },
-    bookInfo: {
-      flex: 1,
-      marginLeft: 14
-    },
-    bookTitle: {
-      color: BRAND.ink,
-      fontWeight: "900",
-      fontSize: 17
-    },
-    bookAuthor: {
-      color: BRAND.muted,
-      marginTop: 5
-    }
-  });
+const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+    backgroundColor: BRAND.background
+  },
+  searchRow: {
+    flexDirection: "row",
+    gap: 8,
+    padding: 12,
+    backgroundColor: BRAND.surface
+  },
+  search: {
+    flex: 1,
+    minHeight: 46,
+    borderWidth: 1,
+    borderColor: BRAND.line,
+    borderRadius: 13,
+    paddingHorizontal: 12
+  },
+  searchButton: {
+    minWidth: 82,
+    borderRadius: 13,
+    backgroundColor: BRAND.teal,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  searchButtonText: {
+    color: "#FFFFFF",
+    fontWeight: "900"
+  },
+  loader: {
+    padding: 8
+  },
+  content: {
+    padding: 14
+  },
+  section: {
+    marginBottom: 20
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between"
+  },
+  sectionTitle: {
+    color: BRAND.ink,
+    fontSize: 22,
+    fontWeight: "900",
+    marginBottom: 10
+  },
+  randomButton: {
+    minHeight: 38,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: BRAND.yellow,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 8
+  },
+  randomButtonText: {
+    color: BRAND.ink,
+    fontWeight: "900"
+  },
+  bookRow: {
+    backgroundColor: BRAND.surface,
+    borderWidth: 1,
+    borderColor: BRAND.line,
+    borderRadius: 18,
+    padding: 12,
+    marginBottom: 10,
+    flexDirection: "row",
+    alignItems: "center"
+  },
+  cover: {
+    width: 72,
+    height: 105
+  },
+  bookInfo: {
+    flex: 1,
+    marginLeft: 14
+  },
+  bookTitle: {
+    color: BRAND.ink,
+    fontWeight: "900",
+    fontSize: 17
+  },
+  bookAuthor: {
+    color: BRAND.muted,
+    marginTop: 5
+  }
+});
