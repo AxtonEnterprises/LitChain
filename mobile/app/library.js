@@ -27,6 +27,38 @@ function progressPercent(item) {
 function isCompleted(item) { return item?.cycleComplete === true || progressPercent(item) >= 100; }
 function isReading(item) { const p = progressPercent(item); return p > 0 && p < 100 && item?.cycleComplete !== true; }
 
+
+function StatIcon({ type }) {
+  if (type === "reading") {
+    return (
+      <View style={s.statIconFrame}>
+        <View style={s.openBookLeft} />
+        <View style={s.openBookRight} />
+        <View style={s.openBookSpine} />
+      </View>
+    );
+  }
+
+  if (type === "completed") {
+    return (
+      <View style={s.statIconFrame}>
+        <View style={s.closedBook} />
+        <View style={s.closedBookSpine} />
+      </View>
+    );
+  }
+
+  return (
+    <View style={s.statIconFrame}>
+      <View style={s.journalBook} />
+      <View style={s.journalSpine} />
+      <View style={[s.journalLine, { top: 6 }]} />
+      <View style={[s.journalLine, { top: 10 }]} />
+      <View style={[s.journalLine, { top: 14 }]} />
+    </View>
+  );
+}
+
 export default function Library() {
   const [tab, setTab] = useState("timeline");
   const [timelineFilter, setTimelineFilter] = useState("all");
@@ -128,9 +160,9 @@ export default function Library() {
         <Text style={s.profileName}>{displayName}</Text>
         {!!profile.username && <Text style={s.profileUsername}>@{profile.username}</Text>}
         <View style={s.profileStats}>
-          <Pressable accessibilityRole="button" accessibilityLabel={`${timelineCounts.all} books in reading history`} onPress={() => Alert.alert("Reading History", `${timelineCounts.all} ${timelineCounts.all === 1 ? "book" : "books"} in your reading timeline.`)} style={s.statPill}><Text style={s.statIcon}>📖</Text><Text style={s.statValue}>{timelineCounts.all}</Text></Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel={`${timelineCounts.completed} completed books`} onPress={() => Alert.alert("Completed Books", `${timelineCounts.completed} ${timelineCounts.completed === 1 ? "book" : "books"} completed.`)} style={s.statPill}><Text style={s.statIcon}>📕</Text><Text style={s.statValue}>{timelineCounts.completed}</Text></Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel={`${(bundle?.journal || []).length} journal entries`} onPress={() => { const count = (bundle?.journal || []).length; Alert.alert("Journal Entries", `${count} ${count === 1 ? "entry" : "entries"} in your reading journal.`); }} style={s.statPill}><Text style={s.statIcon}>📓</Text><Text style={s.statValue}>{(bundle?.journal || []).length}</Text></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel={`${timelineCounts.all} books in reading history`} onPress={() => Alert.alert("Reading History", `${timelineCounts.all} ${timelineCounts.all === 1 ? "book" : "books"} in your reading timeline.`)} style={s.statPill}><StatIcon type="reading" /><Text style={s.statValue}>{timelineCounts.all}</Text></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel={`${timelineCounts.completed} completed books`} onPress={() => Alert.alert("Completed Books", `${timelineCounts.completed} ${timelineCounts.completed === 1 ? "book" : "books"} completed.`)} style={s.statPill}><StatIcon type="completed" /><Text style={s.statValue}>{timelineCounts.completed}</Text></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel={`${(bundle?.journal || []).length} journal entries`} onPress={() => { const count = (bundle?.journal || []).length; Alert.alert("Journal Entries", `${count} ${count === 1 ? "entry" : "entries"} in your reading journal.`); }} style={s.statPill}><StatIcon type="journal" /><Text style={s.statValue}>{(bundle?.journal || []).length}</Text></Pressable>
         </View>
         <View style={s.profileActions}>
           <Pressable style={s.profileAction} onPress={() => router.push("/profile/edit")}><Text style={s.profileActionText}>✎ Edit Profile</Text></Pressable>
@@ -188,7 +220,15 @@ export default function Library() {
 
 const s = StyleSheet.create({
   safe:{flex:1,backgroundColor:BRAND.background},tabs:{flexDirection:"row",padding:6,gap:4,backgroundColor:BRAND.surface},tab:{flex:1,minHeight:36,alignItems:"center",justifyContent:"center",borderRadius:999},tabOn:{backgroundColor:BRAND.primary},tabText:{fontSize:10,fontWeight:"800",color:BRAND.muted},tabTextOn:{color:"#fff"},list:{padding:14,paddingBottom:90},
-  profileCard:{backgroundColor:BRAND.surface,borderWidth:1,borderColor:BRAND.line,borderRadius:22,padding:18,marginBottom:14,flexDirection:"row",alignItems:"flex-start"},profileImage:{width:92,height:92,borderRadius:46,borderWidth:2,borderColor:BRAND.teal},profileFallback:{width:92,height:92,borderRadius:46,backgroundColor:BRAND.teal,alignItems:"center",justifyContent:"center"},profileFallbackText:{color:"#fff",fontSize:34,fontWeight:"900"},profileBody:{flex:1,marginLeft:16},profileEyebrow:{color:BRAND.tealDark,fontWeight:"900",fontSize:11,letterSpacing:1.5},profileName:{color:BRAND.ink,fontWeight:"900",fontSize:28,marginTop:4},profileUsername:{color:BRAND.muted,fontSize:16,marginTop:2},profileStats:{flexDirection:"row",flexWrap:"wrap",gap:7,marginTop:10},statPill:{minWidth:56,height:36,paddingHorizontal:10,borderRadius:999,borderWidth:1,borderColor:BRAND.line,backgroundColor:"#fff",flexDirection:"row",alignItems:"center",justifyContent:"center",gap:6},statIcon:{fontSize:17,lineHeight:20},statValue:{color:BRAND.ink,fontWeight:"900"},profileActions:{flexDirection:"row",flexWrap:"wrap",gap:7,marginTop:10},profileAction:{backgroundColor:"#EDF3F2",paddingHorizontal:12,paddingVertical:9,borderRadius:999},profileActionText:{color:BRAND.ink,fontWeight:"900"},about:{color:BRAND.muted,fontSize:15,lineHeight:21,marginTop:12},
+  profileCard:{backgroundColor:BRAND.surface,borderWidth:1,borderColor:BRAND.line,borderRadius:22,padding:18,marginBottom:14,flexDirection:"row",alignItems:"flex-start"},profileImage:{width:92,height:92,borderRadius:46,borderWidth:2,borderColor:BRAND.teal},profileFallback:{width:92,height:92,borderRadius:46,backgroundColor:BRAND.teal,alignItems:"center",justifyContent:"center"},profileFallbackText:{color:"#fff",fontSize:34,fontWeight:"900"},profileBody:{flex:1,marginLeft:16},profileEyebrow:{color:BRAND.tealDark,fontWeight:"900",fontSize:11,letterSpacing:1.5},profileName:{color:BRAND.ink,fontWeight:"900",fontSize:28,marginTop:4},profileUsername:{color:BRAND.muted,fontSize:16,marginTop:2},profileStats:{flexDirection:"row",flexWrap:"wrap",gap:7,marginTop:10},statPill:{minWidth:56,height:36,paddingHorizontal:10,borderRadius:999,borderWidth:1,borderColor:BRAND.line,backgroundColor:"#fff",flexDirection:"row",alignItems:"center",justifyContent:"center",gap:6},statIconFrame:{width:20,height:20,position:"relative"},
+openBookLeft:{position:"absolute",left:1,top:3,width:9,height:14,borderWidth:1.6,borderColor:BRAND.ink,borderTopLeftRadius:3,borderBottomLeftRadius:3,borderRightWidth:1,backgroundColor:"transparent"},
+openBookRight:{position:"absolute",right:1,top:3,width:9,height:14,borderWidth:1.6,borderColor:BRAND.ink,borderTopRightRadius:3,borderBottomRightRadius:3,borderLeftWidth:1,backgroundColor:"transparent"},
+openBookSpine:{position:"absolute",left:9.25,top:4,width:1.5,height:12,backgroundColor:BRAND.ink,borderRadius:1},
+closedBook:{position:"absolute",left:3,top:2,width:14,height:16,borderWidth:1.6,borderColor:BRAND.ink,borderRadius:2,backgroundColor:"transparent"},
+closedBookSpine:{position:"absolute",left:6,top:3,width:1.5,height:14,backgroundColor:BRAND.ink,borderRadius:1},
+journalBook:{position:"absolute",left:4,top:2,width:13,height:16,borderWidth:1.6,borderColor:BRAND.ink,borderRadius:2,backgroundColor:"transparent"},
+journalSpine:{position:"absolute",left:2,top:4,width:4,height:12,borderLeftWidth:1.6,borderTopWidth:1.6,borderBottomWidth:1.6,borderColor:BRAND.ink,borderTopLeftRadius:2,borderBottomLeftRadius:2},
+journalLine:{position:"absolute",left:8,width:6,height:1.4,backgroundColor:BRAND.ink,borderRadius:1},statValue:{color:BRAND.ink,fontWeight:"900"},profileActions:{flexDirection:"row",flexWrap:"wrap",gap:7,marginTop:10},profileAction:{backgroundColor:"#EDF3F2",paddingHorizontal:12,paddingVertical:9,borderRadius:999},profileActionText:{color:BRAND.ink,fontWeight:"900"},about:{color:BRAND.muted,fontSize:15,lineHeight:21,marginTop:12},
   timelinePanel:{backgroundColor:BRAND.surface,borderWidth:1,borderColor:BRAND.line,borderRadius:22,padding:18,marginBottom:4},sectionEyebrow:{color:BRAND.tealDark,fontSize:11,fontWeight:"900",letterSpacing:1.5},sectionTitle:{color:BRAND.ink,fontSize:27,fontWeight:"900",marginTop:6},visibilityButton:{alignSelf:"flex-start",backgroundColor:BRAND.primary,borderRadius:999,paddingHorizontal:16,paddingVertical:12,marginTop:16},visibilityText:{color:"#fff",fontWeight:"900",fontSize:15},privacyHelp:{color:BRAND.muted,fontSize:15,lineHeight:22,marginTop:15},filters:{flexDirection:"row",flexWrap:"wrap",gap:7,marginTop:16},filter:{paddingHorizontal:11,paddingVertical:9,borderRadius:999},filterOn:{backgroundColor:BRAND.primary},filterText:{color:BRAND.muted,fontWeight:"900",fontSize:12},filterTextOn:{color:"#fff"},empty:{color:BRAND.muted,paddingVertical:20,textAlign:"center"},
   button:{minHeight:44,paddingHorizontal:14,borderRadius:12,backgroundColor:BRAND.primary,alignItems:"center",justifyContent:"center"},buttonText:{color:"#fff",fontWeight:"900"},card:{backgroundColor:BRAND.surface,borderWidth:1,borderColor:BRAND.line,borderRadius:18,padding:18,marginBottom:12},avatar:{width:52,height:52,borderRadius:26,marginBottom:10},groupAvatar:{width:60,height:60,borderRadius:14,marginBottom:10},eyebrow:{color:BRAND.tealDark,fontSize:10,fontWeight:"900"},title:{color:BRAND.ink,fontSize:18,fontWeight:"900",marginTop:6},muted:{color:BRAND.muted,marginTop:3},detail:{color:BRAND.tealDark,marginTop:12,fontWeight:"800"},friendRow:{flexDirection:"row",alignItems:"center",justifyContent:"space-between"},remove:{color:BRAND.danger,fontWeight:"900",marginTop:12},modalHead:{padding:18,flexDirection:"row",alignItems:"center",justifyContent:"space-between",backgroundColor:BRAND.surface},close:{fontSize:30,color:BRAND.ink},searchRow:{flexDirection:"row",gap:8,padding:14},input:{flex:1,minHeight:48,borderWidth:1,borderColor:BRAND.line,borderRadius:12,paddingHorizontal:12,backgroundColor:BRAND.surface},result:{flexDirection:"row",alignItems:"center",gap:12,backgroundColor:BRAND.surface,borderWidth:1,borderColor:BRAND.line,borderRadius:14,padding:12,marginBottom:8},resultAvatar:{width:48,height:48,borderRadius:24},resultFallback:{width:48,height:48,borderRadius:24,backgroundColor:BRAND.teal,alignItems:"center",justifyContent:"center"},fallbackText:{color:"#fff",fontWeight:"900"},resultName:{fontWeight:"900",color:BRAND.ink},add:{backgroundColor:BRAND.primary,borderRadius:10,paddingHorizontal:14,paddingVertical:9},status:{paddingHorizontal:18,paddingVertical:8,color:BRAND.tealDark,textAlign:"center"},sheetRoot:{flex:1},sheetBackdrop:{flex:1,backgroundColor:"rgba(11,45,69,0.38)",justifyContent:"flex-end"},sheet:{height:"68%",minHeight:430,backgroundColor:BRAND.background,borderTopLeftRadius:26,borderTopRightRadius:26,overflow:"hidden",paddingTop:8},sheetHandle:{alignSelf:"center",width:46,height:5,borderRadius:999,backgroundColor:BRAND.line,marginBottom:8},sheetHead:{minHeight:68,paddingHorizontal:18,paddingBottom:10,flexDirection:"row",alignItems:"center",justifyContent:"space-between"},sheetEyebrow:{color:BRAND.tealDark,fontSize:10,fontWeight:"900",letterSpacing:1.4},sheetTitle:{color:BRAND.ink,fontSize:24,fontWeight:"900",marginTop:2},sheetCloseButton:{width:44,height:44,borderRadius:22,backgroundColor:BRAND.surface,alignItems:"center",justifyContent:"center",borderWidth:1,borderColor:BRAND.line},sheetClose:{fontSize:30,lineHeight:32,color:BRAND.ink,fontWeight:"500",marginTop:-2},sheetResults:{paddingHorizontal:14,paddingTop:4,paddingBottom:28}
 });
