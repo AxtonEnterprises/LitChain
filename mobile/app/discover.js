@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -10,7 +10,7 @@ import {
   TextInput,
   View
 } from "react-native";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 
 import AppHeader from "../components/AppHeader";
 import BottomNav from "../components/BottomNav";
@@ -26,11 +26,6 @@ function coverUrl(book) {
   return book?.image || book?.cover || book?.formats?.["image/jpeg"] || "";
 }
 
-/*
- * Reading-progress documents created before Discover passed the cover into
- * Reader can legitimately have no image. Hydrate only those missing covers
- * from Gutendex, using the Gutenberg/book id already stored in progress.
- */
 async function hydrateTimelineCovers(items) {
   const books = Array.isArray(items) ? items : [];
   const missingIds = [
@@ -56,14 +51,11 @@ async function hydrateTimelineCovers(items) {
 
     return books.map((book) => {
       if (coverUrl(book)) return book;
-
       const metadata = byId.get(String(book.bookId || book.id || ""));
       const image = coverUrl(metadata);
-
       return image ? { ...book, image } : book;
     });
   } catch {
-    // Reading history should still render even if cover lookup is unavailable.
     return books;
   }
 }
@@ -75,20 +67,33 @@ export default function DiscoverScreen() {
   const [timeline, setTimeline] = useState([]);
   const [loading, setLoading] = useState(false);
 
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+
+      async function refreshTimeline() {
+        for (let attempt = 0; attempt < 4 && active; attempt += 1) {
+          const reading = await getNativeReadingTimeline();
+
+          if (reading.length || attempt === 3) {
+            const hydrated = await hydrateTimelineCovers(reading);
+            if (active) setTimeline(hydrated);
+            return;
+          }
+
+          await new Promise((resolve) => setTimeout(resolve, 250));
+        }
+      }
+
+      refreshTimeline();
+      return () => {
+        active = false;
+      };
+    }, [])
+  );
+
   useEffect(() => {
-    let active = true;
-
-    (async () => {
-      const reading = await getNativeReadingTimeline();
-      const hydrated = await hydrateTimelineCovers(reading);
-      if (active) setTimeline(hydrated);
-    })();
-
     loadRandom();
-
-    return () => {
-      active = false;
-    };
   }, []);
 
   async function loadRandom() {
@@ -136,9 +141,6 @@ export default function DiscoverScreen() {
         bookId: String(book.bookId || book.id),
         title: book.title || "Book",
         author: authorName(book),
-
-        // FIX: Reader persists this value into readingProgress. Without it,
-        // books opened from Discover were saved with image: null.
         image: coverUrl(book)
       }
     });
@@ -156,7 +158,6 @@ export default function DiscoverScreen() {
             resizeMode="contain"
           />
         )}
-
         <View style={styles.bookInfo}>
           <Text style={styles.bookTitle}>{book.title}</Text>
           <Text style={styles.bookAuthor}>{authorName(book)}</Text>
@@ -171,7 +172,6 @@ export default function DiscoverScreen() {
         title="Discover"
         subtitle="Random, featured, search, and your reading"
       />
-
       <View style={styles.searchRow}>
         <TextInput
           value={queryText}
@@ -181,17 +181,12 @@ export default function DiscoverScreen() {
           placeholderTextColor="#8B999B"
           style={styles.search}
         />
-
         <Pressable onPress={search} style={styles.searchButton}>
           <Text style={styles.searchButtonText}>Search</Text>
         </Pressable>
       </View>
 
-      {loading && (
-        <View style={styles.loader}>
-          <ActivityIndicator />
-        </View>
-      )}
+      {loading && <View style={styles.loader}><ActivityIndicator /></View>}
 
       <ScrollView contentContainerStyle={styles.content}>
         {!!searchResults.length && (
@@ -238,93 +233,21 @@ export default function DiscoverScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: BRAND.background
-  },
-  searchRow: {
-    flexDirection: "row",
-    gap: 8,
-    padding: 12,
-    backgroundColor: BRAND.surface
-  },
-  search: {
-    flex: 1,
-    minHeight: 46,
-    borderWidth: 1,
-    borderColor: BRAND.line,
-    borderRadius: 13,
-    paddingHorizontal: 12
-  },
-  searchButton: {
-    minWidth: 82,
-    borderRadius: 13,
-    backgroundColor: BRAND.teal,
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  searchButtonText: {
-    color: "#FFFFFF",
-    fontWeight: "900"
-  },
-  loader: {
-    padding: 8
-  },
-  content: {
-    padding: 14
-  },
-  section: {
-    marginBottom: 20
-  },
-  sectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between"
-  },
-  sectionTitle: {
-    color: BRAND.ink,
-    fontSize: 22,
-    fontWeight: "900",
-    marginBottom: 10
-  },
-  randomButton: {
-    minHeight: 38,
-    paddingHorizontal: 14,
-    borderRadius: 999,
-    backgroundColor: BRAND.yellow,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 8
-  },
-  randomButtonText: {
-    color: BRAND.ink,
-    fontWeight: "900"
-  },
-  bookRow: {
-    backgroundColor: BRAND.surface,
-    borderWidth: 1,
-    borderColor: BRAND.line,
-    borderRadius: 18,
-    padding: 12,
-    marginBottom: 10,
-    flexDirection: "row",
-    alignItems: "center"
-  },
-  cover: {
-    width: 72,
-    height: 105
-  },
-  bookInfo: {
-    flex: 1,
-    marginLeft: 14
-  },
-  bookTitle: {
-    color: BRAND.ink,
-    fontWeight: "900",
-    fontSize: 17
-  },
-  bookAuthor: {
-    color: BRAND.muted,
-    marginTop: 5
-  }
+  safe: { flex: 1, backgroundColor: BRAND.background },
+  searchRow: { flexDirection: "row", gap: 8, padding: 12, backgroundColor: BRAND.surface },
+  search: { flex: 1, minHeight: 46, borderWidth: 1, borderColor: BRAND.line, borderRadius: 13, paddingHorizontal: 12 },
+  searchButton: { minWidth: 82, borderRadius: 13, backgroundColor: BRAND.teal, alignItems: "center", justifyContent: "center" },
+  searchButtonText: { color: "#FFFFFF", fontWeight: "900" },
+  loader: { padding: 8 },
+  content: { padding: 14 },
+  section: { marginBottom: 20 },
+  sectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  sectionTitle: { color: BRAND.ink, fontSize: 22, fontWeight: "900", marginBottom: 10 },
+  randomButton: { minHeight: 38, paddingHorizontal: 14, borderRadius: 999, backgroundColor: BRAND.yellow, alignItems: "center", justifyContent: "center", marginBottom: 8 },
+  randomButtonText: { color: BRAND.ink, fontWeight: "900" },
+  bookRow: { backgroundColor: BRAND.surface, borderWidth: 1, borderColor: BRAND.line, borderRadius: 18, padding: 12, marginBottom: 10, flexDirection: "row", alignItems: "center" },
+  cover: { width: 72, height: 105 },
+  bookInfo: { flex: 1, marginLeft: 14 },
+  bookTitle: { color: BRAND.ink, fontWeight: "900", fontSize: 17 },
+  bookAuthor: { color: BRAND.muted, marginTop: 5 }
 });
