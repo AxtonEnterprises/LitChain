@@ -1,4 +1,4 @@
-import { collection, doc, getDoc, getDocs } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, serverTimestamp, setDoc } from "firebase/firestore";
 import { auth, db } from "../lib/firebase";
 import { getNativeGroups } from "./social";
 import { getNativeFriendBundle } from "./librarySocial";
@@ -34,6 +34,29 @@ export async function hydrateNativeReadingCovers(items) {
       return image ? { ...book, image } : book;
     });
   } catch { return books; }
+}
+
+export async function getNativeReadingTimelineVisibility() {
+  const user = auth.currentUser;
+  if (!user) return "private";
+  try {
+    const snapshot = await getDoc(doc(db, "users", user.uid));
+    return snapshot.exists() && snapshot.data()?.readingTimelineVisibility === "public" ? "public" : "private";
+  } catch {
+    return "private";
+  }
+}
+
+export async function setNativeReadingTimelineVisibility(visibility) {
+  const user = auth.currentUser;
+  if (!user) throw new Error("You must be logged in.");
+  const normalized = visibility === "public" ? "public" : "private";
+  const now = new Date().toISOString();
+  await Promise.all([
+    setDoc(doc(db, "users", user.uid), { readingTimelineVisibility: normalized, updatedAt: serverTimestamp() }, { merge: true }),
+    setDoc(doc(db, "publicProfiles", user.uid), { userId: user.uid, readingTimelineVisibility: normalized, updatedAtISO: now, updatedAt: serverTimestamp() }, { merge: true })
+  ]);
+  return normalized;
 }
 
 export async function getNativeLibraryBundle() {
