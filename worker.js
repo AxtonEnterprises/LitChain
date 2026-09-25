@@ -335,7 +335,7 @@ async function handleCreateSupportSession(request, env) {
   const form = new URLSearchParams();
 
   form.set("mode", "payment");
-  form.set("ui_mode", "embedded");
+  form.set("ui_mode", "embedded_page");
   form.set("submit_type", "donate");
   form.set(
     "return_url",
