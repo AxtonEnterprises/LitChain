@@ -28,6 +28,7 @@ import Notifications from "./pages/Notifications";
 import DiscoverGroups from "./pages/DiscoverGroups";
 import Moderation from "./pages/Moderation";
 import JoinInvite from "./pages/JoinInvite.jsx";
+import Support from "./pages/Support.jsx";
 
 export default function App() {
   const location = useLocation();
@@ -139,6 +140,7 @@ export default function App() {
             path="/about"
             element={<Navigate to="/read/about" replace />}
           />
+          <Route path="/support" element={<Support />} />
           <Route path="/privacy" element={<Privacy />} />
           <Route path="/terms" element={<Terms />} />
 
