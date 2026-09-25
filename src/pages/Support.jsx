@@ -10,9 +10,18 @@ const TIERS = [
 
 function loadStripeJs() {
   if (window.Stripe) return Promise.resolve();
+
   return new Promise((resolve, reject) => {
-    const existing = document.querySelector('script[src="https://js.stripe.com/v3/"]');
-    if (existing) { existing.addEventListener("load", resolve, { once: true }); existing.addEventListener("error", reject, { once: true }); return; }
+    const existing = document.querySelector(
+      'script[src="https://js.stripe.com/v3/"]'
+    );
+
+    if (existing) {
+      existing.addEventListener("load", resolve, { once: true });
+      existing.addEventListener("error", reject, { once: true });
+      return;
+    }
+
     const script = document.createElement("script");
     script.src = "https://js.stripe.com/v3/";
     script.async = true;
@@ -20,6 +29,24 @@ function loadStripeJs() {
     script.onerror = reject;
     document.head.appendChild(script);
   });
+}
+
+async function readJsonResponse(response) {
+  const text = await response.text();
+
+  if (!text) {
+    throw new Error(
+      `Payment service returned an empty response (${response.status}).`
+    );
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(
+      `Payment service returned an invalid response (${response.status}).`
+    );
+  }
 }
 
 export default function Support() {
@@ -30,76 +57,217 @@ export default function Support() {
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const checkoutRef = useRef(null);
 
-  const complete = new URLSearchParams(window.location.search).get("complete") === "1";
+  const complete =
+    new URLSearchParams(window.location.search).get("complete") === "1";
 
-  useEffect(() => () => { checkoutRef.current?.destroy?.(); }, []);
+  useEffect(
+    () => () => {
+      checkoutRef.current?.destroy?.();
+    },
+    []
+  );
 
   async function beginCheckout() {
     setError("");
     setLoading(true);
+
     try {
-      const publishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
-      if (!publishableKey) throw new Error("Stripe publishable key is not configured.");
+      const publishableKey =
+        import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
+
+      if (!publishableKey) {
+        throw new Error(
+          "Stripe publishable key is not configured."
+        );
+      }
+
       await loadStripeJs();
+
       const stripe = window.Stripe(publishableKey);
-      const body = selected === "custom"
-        ? { tier: "custom", amount: Number(customAmount) }
-        : { tier: selected };
-      const response = await fetch("/api/create-support-session", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
-      });
-      const data = await response.json();
-      if (!response.ok || !data.clientSecret) throw new Error(data.error || "Unable to start checkout.");
+
+      const body =
+        selected === "custom"
+          ? {
+              tier: "custom",
+              amount: Number(customAmount)
+            }
+          : { tier: selected };
+
+      const response = await fetch(
+        "/api/create-support-session",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(body)
+        }
+      );
+
+      const data = await readJsonResponse(response);
+
+      if (!response.ok) {
+        throw new Error(
+          data.error ||
+            `Unable to start checkout (${response.status}).`
+        );
+      }
+
+      if (!data.clientSecret) {
+        throw new Error(
+          "Payment service did not return a checkout session."
+        );
+      }
+
       checkoutRef.current?.destroy?.();
-      checkoutRef.current = await stripe.initEmbeddedCheckout({ clientSecret: data.clientSecret });
+
+      checkoutRef.current =
+        await stripe.initEmbeddedCheckout({
+          clientSecret: data.clientSecret
+        });
+
       setCheckoutOpen(true);
-      requestAnimationFrame(() => checkoutRef.current.mount("#support-checkout"));
-    } catch (e) { setError(e.message || "Unable to start checkout."); }
-    finally { setLoading(false); }
+
+      requestAnimationFrame(() => {
+        checkoutRef.current.mount("#support-checkout");
+      });
+    } catch (e) {
+      setError(
+        e?.message || "Unable to start checkout."
+      );
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
     <div className="support-page">
       <header className="support-header">
-        <a href="/" className="support-brand">The Literature Foundation</a>
-        <a href="/read" className="support-back">Open Lit Chain</a>
+        <a href="/" className="support-brand">
+          The Literature Foundation
+        </a>
+        <a href="/read" className="support-back">
+          Open Lit Chain
+        </a>
       </header>
+
       <main className="support-shell">
         {complete ? (
           <section className="support-thanks">
-            <span className="support-kicker">Thank you</span>
-            <h1>Your support helps keep literature accessible.</h1>
-            <p>Your payment was submitted through Stripe. We appreciate your contribution to The Literature Foundation.</p>
-            <a className="support-primary" href="/read">Return to Lit Chain</a>
+            <span className="support-kicker">
+              Thank you
+            </span>
+            <h1>
+              Your support helps keep literature accessible.
+            </h1>
+            <p>
+              Your payment was submitted through Stripe. We appreciate
+              your contribution to The Literature Foundation.
+            </p>
+            <a className="support-primary" href="/read">
+              Return to Lit Chain
+            </a>
           </section>
         ) : (
           <>
             <section className="support-intro">
-              <span className="support-kicker">Support the Foundation</span>
-              <h1>Help build a permanent home for great literature.</h1>
-              <p>Choose a founding level or enter your own amount. Payments are securely processed by Stripe without leaving this page.</p>
+              <span className="support-kicker">
+                Support the Foundation
+              </span>
+              <h1>
+                Help build a permanent home for great literature.
+              </h1>
+              <p>
+                Choose a founding level or enter your own amount.
+                Payments are securely processed by Stripe without
+                leaving this page.
+              </p>
             </section>
-            <section className="support-grid" aria-label="Contribution levels">
-              {TIERS.map(t => (
-                <button key={t.key} type="button" onClick={() => setSelected(t.key)} className={`support-tier ${selected === t.key ? "selected" : ""}`}>
-                  <span className="support-tier-name">{t.name}</span>
-                  <strong>${t.amount}</strong>
-                  <span>{t.blurb}</span>
+
+            <section
+              className="support-grid"
+              aria-label="Contribution levels"
+            >
+              {TIERS.map((tier) => (
+                <button
+                  key={tier.key}
+                  type="button"
+                  onClick={() => setSelected(tier.key)}
+                  className={`support-tier ${
+                    selected === tier.key ? "selected" : ""
+                  }`}
+                >
+                  <span className="support-tier-name">
+                    {tier.name}
+                  </span>
+                  <strong>${tier.amount}</strong>
+                  <span>{tier.blurb}</span>
                 </button>
               ))}
-              <button type="button" onClick={() => setSelected("custom")} className={`support-tier support-custom ${selected === "custom" ? "selected" : ""}`}>
-                <span className="support-tier-name">Custom Contribution</span>
+
+              <button
+                type="button"
+                onClick={() => setSelected("custom")}
+                className={`support-tier support-custom ${
+                  selected === "custom" ? "selected" : ""
+                }`}
+              >
+                <span className="support-tier-name">
+                  Custom Contribution
+                </span>
                 <strong>Your amount</strong>
-                <span>Choose an amount that works for you.</span>
+                <span>
+                  Choose an amount that works for you.
+                </span>
               </button>
             </section>
+
             {selected === "custom" && (
-              <label className="support-amount">Amount (USD)<input type="number" min="5" max="10000" step="1" value={customAmount} onChange={e => setCustomAmount(e.target.value)} /></label>
+              <label className="support-amount">
+                Amount (USD)
+                <input
+                  type="number"
+                  min="5"
+                  max="10000"
+                  step="1"
+                  value={customAmount}
+                  onChange={(event) =>
+                    setCustomAmount(event.target.value)
+                  }
+                />
+              </label>
             )}
-            <button className="support-primary" type="button" disabled={loading} onClick={beginCheckout}>{loading ? "Opening secure checkout…" : "Continue to secure payment"}</button>
-            {error && <p className="support-error" role="alert">{error}</p>}
-            <p className="support-note">The Literature Foundation does not store your card information. Stripe handles payment details securely.</p>
-            <div id="support-checkout" className={checkoutOpen ? "support-checkout open" : "support-checkout"} />
+
+            <button
+              className="support-primary"
+              type="button"
+              disabled={loading}
+              onClick={beginCheckout}
+            >
+              {loading
+                ? "Opening secure checkout…"
+                : "Continue to secure payment"}
+            </button>
+
+            {error && (
+              <p className="support-error" role="alert">
+                {error}
+              </p>
+            )}
+
+            <p className="support-note">
+              The Literature Foundation does not store your card
+              information. Stripe handles payment details securely.
+            </p>
+
+            <div
+              id="support-checkout"
+              className={
+                checkoutOpen
+                  ? "support-checkout open"
+                  : "support-checkout"
+              }
+            />
           </>
         )}
       </main>
