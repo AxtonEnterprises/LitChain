@@ -153,16 +153,70 @@ export default function Login({ rootMode = false }) {
     <main className="login-page">
       <SEO
         title={
-          mode === "login"
-            ? "Log In | Lit Chain"
-            : "Create Account | Lit Chain"
+          rootMode
+            ? "Lit Chain | Read. Connect. Continue the Chain."
+            : mode === "login"
+              ? "Log In | Lit Chain"
+              : "Create Account | Lit Chain"
         }
-        description="Log in or create a Lit Chain account to read, save progress, take notes, join discussions, and connect through literature."
+        description={
+          rootMode
+            ? "Lit Chain is a free social reading platform from The Literature Foundation. Read great literature, capture ideas, and follow connections between readers, books, and discussions."
+            : "Log in or create a Lit Chain account to read, save progress, take notes, join discussions, and connect through literature."
+        }
         path={seoPath}
-        noindex
+        noindex={!rootMode}
       />
 
-      <section className="login-card">
+      <div className={rootMode ? "login-shell login-shell-root" : "login-shell"}>
+        {rootMode && (
+          <section className="login-intro" aria-labelledby="lit-chain-intro-title">
+            <p className="login-eyebrow">A project of The Literature Foundation</p>
+            <h1 id="lit-chain-intro-title">Read. Connect. Continue the chain.</h1>
+            <p className="login-intro-lead">
+              Lit Chain is a free social reading platform built around the idea that
+              great literature becomes more meaningful when readers can connect what
+              they read with what others discover.
+            </p>
+
+            <div className="login-feature-grid">
+              <article>
+                <strong>Read great literature</strong>
+                <p>Read public-domain books, save your progress, and keep notes connected to the passages that inspired them.</p>
+              </article>
+              <article>
+                <strong>Follow ideas</strong>
+                <p>Explore chains of reader notes and discussions that grow outward from the literature itself.</p>
+              </article>
+              <article>
+                <strong>Read together</strong>
+                <p>Join groups and classes, discuss books, reply to other readers, and build connections between ideas.</p>
+              </article>
+            </div>
+
+            <div className="login-foundation">
+              <div>
+                <p className="login-eyebrow">The Literature Foundation</p>
+                <h2>Keeping literature accessible, engaging, and alive.</h2>
+                <p>
+                  The Literature Foundation develops free tools that help readers,
+                  students, and educators read important works, think about them,
+                  discuss them, and preserve those connections for future readers.
+                </p>
+              </div>
+              <a
+                className="login-support-button"
+                href="https://theliteraturefoundation.org"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Support the Foundation
+              </a>
+            </div>
+          </section>
+        )}
+
+        <section className="login-card" aria-label={mode === "login" ? "Log in" : "Create account"}>
         <img
           className="login-logo"
           src="/branding/lit-chain-logo-horizontal.png"
@@ -291,6 +345,7 @@ export default function Login({ rootMode = false }) {
           <a href="/privacy">Privacy Policy</a>.
         </div>
       </section>
+      </div>
     </main>
   );
 }
